@@ -161,17 +161,42 @@ exec: bash {baseDir}/scripts/run.sh plugins install --plugin-address <addr>
 Пользователю: "Настройка завершена. 2 подписи Keystone потребовалось.
 Теперь переводы на эти адреса выполняются автоматически без Keystone."
 
-## Автоматические trigger (cron)
+## Мониторинг входящих транзакций
+
+Команда `watch` проверяет новые транзакции с момента последней проверки:
+```
+exec: bash {baseDir}/scripts/run.sh watch
+```
+Возвращает JSON с полями `new_incoming`, `new_outgoing`, `has_new`, `balance_ton`.
+
+Если `has_new` = true, уведомить пользователя:
+- Входящие: "💰 Получено X TON от UQabc..."
+- Исходящие: "📤 Отправлено X TON на UQxyz..."
+- Текущий баланс
+
+Если `has_new` = false — НЕ отправлять ничего, молча завершить.
+
+### Рекомендуемый cron (OpenClaw Gateway)
+```json
+{
+  "cron": [
+    {
+      "schedule": "*/2 * * * *",
+      "skill": "exton-wallet",
+      "prompt": "Проверь новые транзакции командой watch. Если есть новые — уведоми пользователя. Если нет — молча заверши."
+    }
+  ]
+}
+```
+Каждые 2 минуты. Расход токенов только при наличии новых транзакций.
+
+## Автоматические trigger плагинов (cron)
 
 Плагины subscription, payroll, domain-renewal, timelock, inheritance, dead-man-switch — могут быть вызваны кем угодно (trustless). Для trigger нужен только газ (~0.05 TON).
 
 ```
 exec: bash {baseDir}/scripts/run.sh plugins trigger <plugin_address>
 ```
-
-Рекомендуемые cron-задачи:
-- Ежедневно: проверить все time-gated плагины
-- Каждые 90 дней: пинг inheritance/dead-man-switch
 
 ## Обновление
 

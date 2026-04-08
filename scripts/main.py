@@ -484,6 +484,82 @@ def cmd_check_tx(args):
     print(json.dumps(result, indent=2))
 
 
+def cmd_watch(args):
+    """Check for new transactions since last check. Used by cron for notifications."""
+    from crypto.storage import load_config, EXTON_DIR
+    from ton.api import get_transactions, get_balance
+    from ton.address import to_non_bounceable
+
+    config = load_config()
+    address = config.get("wallet_address", os.environ.get("EXTON_WALLET_ADDRESS", ""))
+    if not address:
+        print(json.dumps({"error": "Wallet not configured"}))
+        return
+
+    # Load last seen timestamp
+    state_file = EXTON_DIR / "watch_state.json"
+    last_seen = 0
+    if state_file.exists():
+        try:
+            last_seen = json.loads(state_file.read_text()).get("last_seen", 0)
+        except Exception:
+            pass
+
+    txs = get_transactions(address, 10)
+    balance = get_balance(address)
+
+    # Filter new transactions
+    new_incoming = []
+    new_outgoing = []
+    max_ts = last_seen
+
+    for tx in txs:
+        ts = tx.get("timestamp", 0)
+        if ts <= last_seen:
+            continue
+        max_ts = max(max_ts, ts)
+
+        sender = tx.get("sender", "")
+        recipient = tx.get("recipient", "")
+
+        # Check if incoming (recipient matches our wallet)
+        if recipient and recipient[-40:] == address[-40:]:
+            try:
+                from_addr = to_non_bounceable(sender) if sender else "?"
+            except Exception:
+                from_addr = sender[:20] + "..." if sender else "?"
+            new_incoming.append({
+                "from": from_addr,
+                "amount_ton": tx.get("amount_ton", 0),
+                "comment": tx.get("comment", ""),
+                "timestamp": ts,
+            })
+        elif sender and sender[-40:] == address[-40:]:
+            try:
+                to_addr = to_non_bounceable(recipient) if recipient else "?"
+            except Exception:
+                to_addr = recipient[:20] + "..." if recipient else "?"
+            new_outgoing.append({
+                "to": to_addr,
+                "amount_ton": tx.get("amount_ton", 0),
+                "timestamp": ts,
+            })
+
+    # Save state
+    if max_ts > last_seen:
+        EXTON_DIR.mkdir(parents=True, exist_ok=True)
+        state_file.write_text(json.dumps({"last_seen": max_ts}))
+
+    result = {
+        "balance_ton": balance.get("balance_ton", "?"),
+        "new_incoming": new_incoming,
+        "new_outgoing": new_outgoing,
+        "has_new": len(new_incoming) > 0 or len(new_outgoing) > 0,
+    }
+
+    print(json.dumps(result, indent=2))
+
+
 def main():
     if len(sys.argv) < 2:
         print(__doc__)
@@ -522,6 +598,7 @@ def main():
         "send": cmd_send,
         "sign-submit": cmd_sign_submit,
         "check-tx": cmd_check_tx,
+        "watch": cmd_watch,
     }
 
     fn = commands.get(command)
