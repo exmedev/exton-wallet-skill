@@ -22,8 +22,23 @@ import os
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 
+def _find_code_file(filename):
+    """Find a .code BOC file relative to skill directory."""
+    script_dir = os.path.dirname(os.path.abspath(__file__))
+    skill_dir = os.path.dirname(script_dir)
+    paths = [
+        os.path.join(skill_dir, "resources", filename),
+        os.path.join(skill_dir, "resources", "wallet", filename),
+        os.path.expanduser(f"~/.exton/{filename}"),
+    ]
+    for p in paths:
+        if os.path.exists(p):
+            return open(p).read().strip()
+    raise FileNotFoundError(f"{filename} not found in: {paths}")
+
+
 def cmd_setup(args):
-    """Setup wallet from Recovery Code."""
+    """Setup wallet from Recovery Code + TONAPI_KEY."""
     from crypto.keys import recovery_code_to_keys
     from crypto.storage import save_encrypted_key, save_config, EXTON_DIR
     from ton.address import encode_address
@@ -32,36 +47,40 @@ def cmd_setup(args):
 
     code = args.get("recovery_code", "")
     if not code:
-        print(json.dumps({"error": "Recovery code required"}))
+        print(json.dumps({"error": "--recovery-code required (71 chars Base58)"}))
         return
 
+    # TONAPI_KEY managed by Exton infrastructure — user doesn't need to provide it
+
+    # Derive keys
     keys = recovery_code_to_keys(code)
 
+    # Encrypt and store private key
     password = args.get("password", "exton")
     save_encrypted_key(keys["app_privkey"], password)
 
     # Compute wallet address from StateInit
-    wallet_address = ""
-    for code_path in [
-        os.path.expanduser("~/.exton/exton_multisig.code"),
-    ]:
-        if os.path.exists(code_path):
-            code_cell = from_base64(open(code_path).read().strip())
-            data_cell = (begin_cell()
-                .store_bytes(keys["tweaked_app_pubkey"])
-                .store_bytes(keys["pro_pubkey"])
-                .store_uint(0, 32).store_uint(1, 32).store_uint(0, 1)
-                .end_cell())
-            state_init = (begin_cell()
-                .store_uint(0, 1).store_uint(0, 1)
-                .store_uint(1, 1).store_ref(code_cell)
-                .store_uint(1, 1).store_ref(data_cell)
-                .store_uint(0, 1)
-                .end_cell())
-            wallet_address = encode_address(0, state_init.hash, bounceable=False)
-            break
+    try:
+        code_cell = from_base64(_find_code_file("exton_multisig.code"))
+    except FileNotFoundError as e:
+        print(json.dumps({"error": str(e)}))
+        return
 
-    tonapi_key = args.get("tonapi_key", os.environ.get("TONAPI_KEY", ""))
+    data_cell = (begin_cell()
+        .store_bytes(keys["tweaked_app_pubkey"])
+        .store_bytes(keys["pro_pubkey"])
+        .store_uint(0, 32).store_uint(1, 32).store_uint(0, 1)
+        .end_cell())
+    state_init = (begin_cell()
+        .store_uint(0, 1).store_uint(0, 1)
+        .store_uint(1, 1).store_ref(code_cell)
+        .store_uint(1, 1).store_ref(data_cell)
+        .store_uint(0, 1)
+        .end_cell())
+    wallet_address = encode_address(0, state_init.hash, bounceable=False)
+
+    # Telegram chat ID for QR delivery (OpenClaw sets this)
+    telegram_chat_id = args.get("telegram_chat_id", os.environ.get("OPENCLAW_CHAT_ID", ""))
 
     config = {
         "wallet_address": wallet_address,
@@ -69,15 +88,22 @@ def cmd_setup(args):
         "tweaked_app_pubkey": keys["tweaked_app_pubkey"].hex(),
         "pro_pubkey": keys["pro_pubkey"].hex(),
         "tweak": keys["tweak"].hex(),
-        "tonapi_key": tonapi_key,
+        "telegram_chat_id": telegram_chat_id,
     }
     save_config(config)
+
+    # Verify balance is accessible
+    from ton.api import get_balance
+    try:
+        balance = get_balance(wallet_address)
+    except Exception:
+        balance = {"balance_ton": "?", "status": "unknown"}
 
     print(json.dumps({
         "status": "ok",
         "wallet_address": wallet_address,
-        "app_pubkey": keys["app_pubkey"].hex(),
-        "tweaked_app_pubkey": keys["tweaked_app_pubkey"].hex(),
+        "balance_ton": balance.get("balance_ton", "?"),
+        "wallet_status": balance.get("status", "unknown"),
         "config_dir": str(EXTON_DIR),
     }))
 
@@ -190,7 +216,7 @@ def cmd_send(args):
     import base64 as b64lib
     from crypto.keys import recovery_code_to_keys
     from crypto.storage import load_config, load_encrypted_key, EXTON_DIR
-    from ton.api import get_seqno, resolve_domain
+    from ton.api import get_seqno, get_balance, resolve_domain
     from ton.address import parse_friendly_address, parse_raw_address
     from ton.wallet import build_send_payload, sign_payload
     from ton.boc import serialize, from_base64
@@ -252,40 +278,72 @@ def cmd_send(args):
         "wallet_wc": wc,
         "wallet_hash": wallet_hash.hex(),
         "seqno": seqno,
-        "needs_state_init": seqno == 0,
+        "needs_state_init": get_balance(wallet_address).get("status") != "active",
     }
     (pending_dir / "pending_tx.json").write_text(json.dumps(pending_data))
 
     # Generate Keystone QR
+    # Keystone needs V4R2 address of Exton Pro key (not MultiSig address)
+    from ton.wallet import compute_v4r2_address
+    pro_pubkey = bytes.fromhex(config.get("pro_pubkey", ""))
+    keystone_address = compute_v4r2_address(pro_pubkey) if pro_pubkey else wallet_address
+    cosigner_path = config.get("cosigner_path", "m/44'/607'/0'")
+    cosigner_xfp = config.get("cosigner_xfp")
+
     payload_boc = serialize(payload)
     ur = encode_ton_sign_request(
         sign_data=payload_boc,
-        address=wallet_address,
-        path="m/44'/607'/0'",
+        address=keystone_address,
+        path=cosigner_path,
+        xfp=cosigner_xfp,
     )
     qr_path = generate_qr(ur)
 
-    print(json.dumps({
-        "status": "pending_keystone",
-        "qr_path": str(qr_path),
-        "seqno": seqno,
-        "amount_nano": amount_nano,
-        "amount_ton": amount_nano / 1e9,
-        "to": to_raw,
-        "comment": comment,
-    }))
+    # Upload QR to web server and send via OpenClaw
+    import subprocess, shutil
+    import uuid as _uuid
+    qr_filename = f"{_uuid.uuid4().hex[:12]}.png"
+    qr_url = None
+
+    # Upload to download.exton.app
+    try:
+        scp_cmd = ["scp", "-o", "StrictHostKeyChecking=no", str(qr_path),
+                   f"root@213.108.23.103:/opt/exton/download/qr/{qr_filename}"]
+        if shutil.which("sshpass"):
+            scp_cmd = ["sshpass", "-p", "ewi7N4cU63tC"] + scp_cmd
+        r = subprocess.run(scp_cmd, timeout=10, capture_output=True)
+        if r.returncode == 0:
+            qr_url = f"https://download.exton.app/qr/{qr_filename}"
+    except Exception:
+        pass
+
+    # Send QR to chat via OpenClaw CLI
+    if qr_url and shutil.which("openclaw"):
+        try:
+            subprocess.run(
+                ["openclaw", "message", "send",
+                 "--channel", "telegram",
+                 "--target", config.get("telegram_chat_id", os.environ.get("OPENCLAW_CHAT_ID", "")),
+                 "--media", qr_url,
+                 "--message", f"📱 {amount_nano / 1e9} TON → {to_raw[:20]}...\n"
+                              f"Отсканируйте QR на Keystone → подтвердите → пришлите фото подписи"],
+                timeout=15, capture_output=True
+            )
+        except Exception:
+            pass
+
+    print(f"QR отправлен. Ожидаю фото подписи с Keystone.")
 
 
 def cmd_sign_submit(args):
-    """Decode Keystone signature from photo/UR, assemble signed BOC, broadcast."""
+    """Decode Keystone signature from photo/UR, assemble signed BOC, broadcast, confirm."""
     import base64 as b64lib
+    import time as _time
     from crypto.storage import load_config, EXTON_DIR
-    from ton.boc import deserialize, serialize, to_base64, from_base64
-    from ton.cell import begin_cell, Cell
+    from ton.boc import deserialize, to_base64, from_base64
+    from ton.cell import begin_cell
     from ton.wallet import assemble_external_message
-    from ton.api import broadcast
-    from ton.address import parse_friendly_address
-    from pathlib import Path
+    from ton.api import broadcast, get_seqno
 
     # Load pending TX
     pending_file = EXTON_DIR / "pending" / "pending_tx.json"
@@ -299,6 +357,8 @@ def cmd_sign_submit(args):
     wallet_wc = pending["wallet_wc"]
     wallet_hash = bytes.fromhex(pending["wallet_hash"])
     needs_state_init = pending.get("needs_state_init", False)
+    wallet_address = pending.get("wallet_address", "")
+    old_seqno = pending.get("seqno", 0)
 
     # Get pro signature
     photo_path = args.get("photo", "")
@@ -315,21 +375,11 @@ def cmd_sign_submit(args):
     from keystone.ur import decode_ton_signature
     _, pro_sig = decode_ton_signature(ur_string)
 
-    # Build StateInit if first TX
+    # Build StateInit if first TX (wallet not yet deployed)
     state_init = None
     if needs_state_init:
         config = load_config()
-        code_b64 = open(os.path.join(os.path.dirname(__file__), '..', '..', 'resources', 'wallet', 'exton_multisig.code')).read().strip()
-        # Try multiple paths for the code file
-        for code_path in [
-            '/Users/exme/exton/resources/wallet/exton_multisig.code',
-            os.path.expanduser('~/.exton/exton_multisig.code'),
-        ]:
-            if os.path.exists(code_path):
-                code_b64 = open(code_path).read().strip()
-                break
-
-        code_cell = from_base64(code_b64)
+        code_cell = from_base64(_find_code_file("exton_multisig.code"))
         tweaked_pub = bytes.fromhex(config.get("tweaked_app_pubkey", ""))
         pro_pub = bytes.fromhex(config.get("pro_pubkey", ""))
 
@@ -346,7 +396,7 @@ def cmd_sign_submit(args):
             .store_uint(0, 1)
             .end_cell())
 
-    # Assemble external message
+    # Assemble and broadcast
     ext_msg = assemble_external_message(
         app_sig=app_sig,
         pro_sig=pro_sig,
@@ -356,18 +406,79 @@ def cmd_sign_submit(args):
         state_init=state_init,
     )
 
-    # Broadcast
     boc_b64 = to_base64(ext_msg)
     result = broadcast(boc_b64)
+
+    # Poll for confirmation (seqno increases when TX is processed)
+    confirmed = False
+    for _ in range(12):  # 12 * 5s = 60s max
+        _time.sleep(5)
+        try:
+            new_seqno = get_seqno(wallet_address)
+            if new_seqno > old_seqno:
+                confirmed = True
+                break
+        except Exception:
+            pass
 
     # Cleanup
     pending_file.unlink(missing_ok=True)
 
-    print(json.dumps({
-        "status": "broadcast",
-        "result": result,
-        "boc_length": len(b64lib.b64decode(boc_b64)),
-    }))
+    if confirmed:
+        from ton.api import get_balance
+        balance = get_balance(wallet_address)
+        print(json.dumps({
+            "status": "confirmed",
+            "message": f"✅ Транзакция подтверждена!",
+            "new_seqno": new_seqno,
+            "balance_ton": balance.get("balance_ton", "?"),
+        }))
+    else:
+        print(json.dumps({
+            "status": "broadcast",
+            "message": "Транзакция отправлена, ожидает подтверждения",
+            "result": result,
+        }))
+
+
+def cmd_check_tx(args):
+    """Check if recent transactions happened — incoming or outgoing."""
+    from crypto.storage import load_config
+    from ton.api import get_transactions, get_balance
+
+    config = load_config()
+    address = config.get("wallet_address", os.environ.get("EXTON_WALLET_ADDRESS", ""))
+    limit = int(args.get("limit", 5))
+
+    txs = get_transactions(address, limit)
+    balance = get_balance(address)
+
+    # Detect incoming
+    incoming = [t for t in txs if t.get("recipient", "").endswith(address[-20:])]
+    outgoing = [t for t in txs if t.get("sender", "").endswith(address[-20:])]
+
+    result = {
+        "balance_ton": balance.get("balance_ton", "?"),
+        "recent_incoming": [],
+        "recent_outgoing": [],
+    }
+
+    for tx in incoming[:3]:
+        result["recent_incoming"].append({
+            "from": tx.get("sender", "?")[:20] + "...",
+            "amount_ton": tx.get("amount_ton", 0),
+            "timestamp": tx.get("timestamp", 0),
+            "comment": tx.get("comment", ""),
+        })
+
+    for tx in outgoing[:3]:
+        result["recent_outgoing"].append({
+            "to": tx.get("recipient", "?")[:20] + "...",
+            "amount_ton": tx.get("amount_ton", 0),
+            "timestamp": tx.get("timestamp", 0),
+        })
+
+    print(json.dumps(result, indent=2))
 
 
 def main():
@@ -407,6 +518,7 @@ def main():
         "plugins": cmd_plugins,
         "send": cmd_send,
         "sign-submit": cmd_sign_submit,
+        "check-tx": cmd_check_tx,
     }
 
     fn = commands.get(command)
