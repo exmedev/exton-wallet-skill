@@ -448,17 +448,22 @@ def cmd_check_tx(args):
     """Check if recent transactions happened — incoming or outgoing."""
     from crypto.storage import load_config
     from ton.api import get_transactions, get_balance
+    from ton.address import parse_friendly_address
 
     config = load_config()
     address = config.get("wallet_address", os.environ.get("EXTON_WALLET_ADDRESS", ""))
     limit = int(args.get("limit", 5))
 
+    # Raw hash for comparison
+    my_wc, my_hash = parse_friendly_address(address)
+    my_raw = my_hash.hex()
+
     txs = get_transactions(address, limit)
     balance = get_balance(address)
 
-    # Detect incoming
-    incoming = [t for t in txs if t.get("recipient", "").endswith(address[-20:])]
-    outgoing = [t for t in txs if t.get("sender", "").endswith(address[-20:])]
+    # Detect by raw hash
+    incoming = [t for t in txs if t.get("recipient", "").split(":")[-1] == my_raw]
+    outgoing = [t for t in txs if t.get("sender", "").split(":")[-1] == my_raw]
 
     result = {
         "balance_ton": balance.get("balance_ton", "?"),
@@ -488,13 +493,17 @@ def cmd_watch(args):
     """Check for new transactions since last check. Used by cron for notifications."""
     from crypto.storage import load_config, EXTON_DIR
     from ton.api import get_transactions, get_balance
-    from ton.address import to_non_bounceable
+    from ton.address import parse_friendly_address, to_non_bounceable, encode_address
 
     config = load_config()
     address = config.get("wallet_address", os.environ.get("EXTON_WALLET_ADDRESS", ""))
     if not address:
         print(json.dumps({"error": "Wallet not configured"}))
         return
+
+    # Get our raw address hash for comparison (API returns raw format 0:hex)
+    my_wc, my_hash = parse_friendly_address(address)
+    my_raw_suffix = my_hash.hex()  # 64-char hex hash
 
     # Load last seen timestamp
     state_file = EXTON_DIR / "watch_state.json"
@@ -522,8 +531,12 @@ def cmd_watch(args):
         sender = tx.get("sender", "")
         recipient = tx.get("recipient", "")
 
-        # Check if incoming (recipient matches our wallet)
-        if recipient and recipient[-40:] == address[-40:]:
+        # Compare by raw hex hash (API returns "0:62230f464b..." format)
+        recipient_hash = recipient.split(":")[-1] if ":" in recipient else ""
+        sender_hash = sender.split(":")[-1] if ":" in sender else ""
+
+        if recipient_hash == my_raw_suffix:
+            # Incoming
             try:
                 from_addr = to_non_bounceable(sender) if sender else "?"
             except Exception:
@@ -534,7 +547,8 @@ def cmd_watch(args):
                 "comment": tx.get("comment", ""),
                 "timestamp": ts,
             })
-        elif sender and sender[-40:] == address[-40:]:
+        elif sender_hash == my_raw_suffix:
+            # Outgoing
             try:
                 to_addr = to_non_bounceable(recipient) if recipient else "?"
             except Exception:

@@ -45,6 +45,21 @@ except:
     print('  pyzbar not available (install zbar: brew install zbar / apt install libzbar0)')
 "
 
+# Enable cron in OpenClaw config if not already
+OPENCLAW_CONFIG="$HOME/.openclaw/openclaw.json"
+if [ -f "$OPENCLAW_CONFIG" ]; then
+    python3 -c "
+import json
+config = json.load(open('$OPENCLAW_CONFIG'))
+if 'cron' not in config:
+    config['cron'] = {'enabled': True}
+elif not config['cron'].get('enabled'):
+    config['cron']['enabled'] = True
+json.dump(config, open('$OPENCLAW_CONFIG', 'w'), indent=2)
+print('  Cron enabled in openclaw.json')
+" 2>/dev/null
+fi
+
 # Setup cron for transaction monitoring
 # Write directly to jobs.json (safe during install, Gateway not yet running with new config)
 CRON_DIR="$HOME/.openclaw/cron"
