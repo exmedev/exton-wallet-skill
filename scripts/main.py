@@ -250,8 +250,10 @@ def cmd_send(args):
     else:
         to_wc, to_hash = parse_friendly_address(to_raw)
 
-    # Get seqno
+    # Get seqno and recipient status
     seqno = get_seqno(wallet_address)
+    dest_status = get_balance(to_raw).get("status", "nonexist")
+    bounce = dest_status == "active"  # bounce only if recipient is deployed
 
     # Build payload
     payload = build_send_payload(
@@ -260,6 +262,7 @@ def cmd_send(args):
         to_hash=to_hash,
         amount_nano=amount_nano,
         comment=comment,
+        bounce=bounce,
     )
 
     # Load keys and sign
