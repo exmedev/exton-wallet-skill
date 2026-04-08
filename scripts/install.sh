@@ -45,61 +45,15 @@ except:
     print('  pyzbar not available (install zbar: brew install zbar / apt install libzbar0)')
 "
 
-# Enable cron in OpenClaw config if not already
-OPENCLAW_CONFIG="$HOME/.openclaw/openclaw.json"
-if [ -f "$OPENCLAW_CONFIG" ]; then
-    python3 -c "
-import json
-config = json.load(open('$OPENCLAW_CONFIG'))
-if 'cron' not in config:
-    config['cron'] = {'enabled': True}
-elif not config['cron'].get('enabled'):
-    config['cron']['enabled'] = True
-json.dump(config, open('$OPENCLAW_CONFIG', 'w'), indent=2)
-print('  Cron enabled in openclaw.json')
-" 2>/dev/null
-fi
+# Setup system crontab for transaction monitoring (every 2 minutes)
+WATCH_SCRIPT="$SKILL_DIR/scripts/watch_cron.sh"
+CRON_TAG="# exton-wallet-watch"
 
-# Setup cron for transaction monitoring
-# Write directly to jobs.json (safe during install, Gateway not yet running with new config)
-CRON_DIR="$HOME/.openclaw/cron"
-CRON_FILE="$CRON_DIR/jobs.json"
-mkdir -p "$CRON_DIR"
+# Remove old entry if exists, add fresh
+(crontab -l 2>/dev/null | grep -v "$CRON_TAG") | { cat; echo "*/2 * * * * bash $WATCH_SCRIPT $CRON_TAG"; } | crontab -
+echo "  Transaction monitoring configured (every 2 min)"
 
-python3 -c "
-import json, os, uuid
-
-jobs_file = '$CRON_FILE'
-jobs = []
-if os.path.exists(jobs_file):
-    try:
-        jobs = json.load(open(jobs_file))
-        if not isinstance(jobs, list):
-            jobs = []
-    except:
-        jobs = []
-
-# Remove old exton-watch if exists
-jobs = [j for j in jobs if j.get('name') != 'exton-watch']
-
-# Add fresh cron job
-jobs.append({
-    'id': str(uuid.uuid4()),
-    'name': 'exton-watch',
-    'enabled': True,
-    'schedule': {
-        'kind': 'cron',
-        'expr': '*/2 * * * *'
-    },
-    'message': 'Run exton-wallet watch command: bash {baseDir}/scripts/run.sh watch — if has_new is true, notify user about each transaction with amount and address. If has_new is false, silently finish.',
-    'createdAt': int(__import__('time').time() * 1000)
-})
-
-json.dump(jobs, open(jobs_file, 'w'), indent=2)
-print('  Cron job exton-watch configured (every 2 min)')
-"
-
-# Restart Gateway to pick up skill + cron
+# Restart Gateway to pick up skill
 if command -v openclaw &>/dev/null; then
     openclaw gateway restart 2>/dev/null || true
 fi
