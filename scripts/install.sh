@@ -45,18 +45,48 @@ except:
     print('  pyzbar not available (install zbar: brew install zbar / apt install libzbar0)')
 "
 
-# Restart Gateway to pick up skill
+# Setup cron for transaction monitoring
+# Write directly to jobs.json (safe during install, Gateway not yet running with new config)
+CRON_DIR="$HOME/.openclaw/cron"
+CRON_FILE="$CRON_DIR/jobs.json"
+mkdir -p "$CRON_DIR"
+
+python3 -c "
+import json, os, uuid
+
+jobs_file = '$CRON_FILE'
+jobs = []
+if os.path.exists(jobs_file):
+    try:
+        jobs = json.load(open(jobs_file))
+        if not isinstance(jobs, list):
+            jobs = []
+    except:
+        jobs = []
+
+# Remove old exton-watch if exists
+jobs = [j for j in jobs if j.get('name') != 'exton-watch']
+
+# Add fresh cron job
+jobs.append({
+    'id': str(uuid.uuid4()),
+    'name': 'exton-watch',
+    'enabled': True,
+    'schedule': {
+        'kind': 'cron',
+        'expr': '*/2 * * * *'
+    },
+    'message': 'Run exton-wallet watch command: bash {baseDir}/scripts/run.sh watch — if has_new is true, notify user about each transaction with amount and address. If has_new is false, silently finish.',
+    'createdAt': int(__import__('time').time() * 1000)
+})
+
+json.dump(jobs, open(jobs_file, 'w'), indent=2)
+print('  Cron job exton-watch configured (every 2 min)')
+"
+
+# Restart Gateway to pick up skill + cron
 if command -v openclaw &>/dev/null; then
     openclaw gateway restart 2>/dev/null || true
-    sleep 2
-
-    # Setup cron for transaction monitoring (every 2 minutes)
-    # Remove old cron if exists, then add fresh
-    openclaw cron rm --name exton-watch 2>/dev/null || true
-    openclaw cron add --name exton-watch \
-        --cron "*/2 * * * *" \
-        --message "Run exton-wallet watch command. If has_new=true, notify user about each incoming/outgoing transaction with amount and sender/recipient address. If has_new=false, do nothing silently." \
-        2>/dev/null || echo "Note: cron setup requires paired Gateway. Pair first, then run install.sh again."
 fi
 
 echo ""
