@@ -1,9 +1,9 @@
 #!/bin/bash
-# Exton Wallet Skill — automatic dependency installer
+# Exton Wallet Skill — install dependencies
+# Idempotent: safe to run multiple times
 set -e
 
 SKILL_DIR="$(cd "$(dirname "$0")/.." && pwd)"
-VENV_DIR="$SKILL_DIR/.venv"
 
 echo "Installing Exton Wallet Skill..."
 
@@ -13,49 +13,43 @@ if ! command -v python3 &>/dev/null; then
     exit 1
 fi
 
-# Install zbar (system library for QR decoding)
+# Install system dependency: zbar (for QR decoding)
 OS="$(uname -s)"
 if [ "$OS" = "Darwin" ]; then
     command -v brew &>/dev/null && brew install zbar 2>/dev/null || true
 elif [ "$OS" = "Linux" ]; then
     if command -v apt-get &>/dev/null; then
-        sudo apt-get install -y libzbar0 python3-venv 2>/dev/null || true
+        sudo apt-get install -y -qq libzbar0 python3-venv 2>/dev/null || true
     elif command -v dnf &>/dev/null; then
-        sudo dnf install -y zbar python3-virtualenv 2>/dev/null || true
+        sudo dnf install -y -q zbar python3-virtualenv 2>/dev/null || true
     fi
 fi
 
-# Create venv and install Python packages
-echo "Creating virtual environment..."
-python3 -m venv "$VENV_DIR"
-"$VENV_DIR/bin/pip" install --quiet PyNaCl>=1.5.0 base58>=2.1 qrcode>=7.4 Pillow>=10.0 pyzbar>=0.1.9
+# Create or repair venv
+if [ ! -f "$SKILL_DIR/.venv/bin/python3" ]; then
+    rm -rf "$SKILL_DIR/.venv"
+    python3 -m venv "$SKILL_DIR/.venv"
+fi
 
-# Create wrapper script that uses venv python
-cat > "$SKILL_DIR/scripts/run.sh" << 'WRAPPER'
-#!/bin/bash
-SKILL_DIR="$(cd "$(dirname "$0")/.." && pwd)"
-exec "$SKILL_DIR/.venv/bin/python3" "$SKILL_DIR/scripts/main.py" "$@"
-WRAPPER
-chmod +x "$SKILL_DIR/scripts/run.sh"
+# Install Python packages
+"$SKILL_DIR/.venv/bin/pip" install --quiet -r "$SKILL_DIR/scripts/requirements.txt"
 
 # Verify
-"$VENV_DIR/bin/python3" -c "
+"$SKILL_DIR/.venv/bin/python3" -c "
 import nacl.signing; import base58; import qrcode
-print('  PyNaCl OK')
-print('  base58 OK')
-print('  qrcode OK')
+print('  All dependencies OK')
 try:
-    from pyzbar import pyzbar; print('  pyzbar OK')
+    from pyzbar import pyzbar
+    print('  QR decoding OK')
 except:
-    print('  pyzbar: not available (QR decode disabled)')
+    print('  pyzbar not available (install zbar: brew install zbar / apt install libzbar0)')
 "
 
-# Restart OpenClaw Gateway to pick up new skill
+# Restart Gateway to pick up skill
 if command -v openclaw &>/dev/null; then
-    echo "Restarting OpenClaw Gateway..."
     openclaw gateway restart 2>/dev/null || true
 fi
 
 echo ""
 echo "Exton Wallet Skill installed!"
-echo "Start a new session (/new) and say: 'Connect my Exton wallet'"
+echo "Start a new session (/new) and say: Connect my Exton wallet"
