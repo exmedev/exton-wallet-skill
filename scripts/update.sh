@@ -11,7 +11,7 @@ echo "Updating Exton Wallet Skill..."
 # Reset local changes (skill code is managed by git, not user)
 git fetch origin main 2>/dev/null
 git reset --hard origin/main 2>/dev/null
-git clean -fd 2>/dev/null
+git clean -fd --exclude=.venv 2>/dev/null
 
 # Rebuild venv if missing or broken
 if [ ! -f "$SKILL_DIR/.venv/bin/python3" ]; then
