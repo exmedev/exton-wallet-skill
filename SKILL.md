@@ -17,11 +17,9 @@ metadata: {"openclaw":{"requires":{"bins":["python3"]},"emoji":"💎","os":["dar
 Если файл `~/.exton/config.json` не существует, провести настройку в чате:
 
 1. Спросить: "Введите Recovery Code вашего Exton MultiSig кошелька (71 символ)"
-2. Спросить: "Введите TONAPI_KEY (получить бесплатно на tonconsole.com)"
-   Если пользователь не имеет ключ, использовать пустую строку.
-3. Запустить:
+2. Запустить:
    ```
-   exec: bash {baseDir}/scripts/run.sh setup --recovery-code "<code>" --tonapi-key "<key>"
+   exec: bash {baseDir}/scripts/run.sh setup --recovery-code "<code>"
    ```
 4. Из ответа JSON взять `wallet_address` и сообщить:
    "✅ Кошелёк подключён: <wallet_address>"
@@ -37,29 +35,43 @@ metadata: {"openclaw":{"requires":{"bins":["python3"]},"emoji":"💎","os":["dar
 
 ### Баланс
 ```
-exec: EXTON_WALLET_ADDRESS=<addr> TONAPI_KEY=<key> bash {baseDir}/scripts/run.sh balance
+exec: bash {baseDir}/scripts/run.sh balance
 ```
 Ответ JSON: `{balance_nano, balance_ton, status}`
 
 ### История транзакций
 ```
-exec: EXTON_WALLET_ADDRESS=<addr> TONAPI_KEY=<key> bash {baseDir}/scripts/run.sh history --limit 20
+exec: bash {baseDir}/scripts/run.sh history --limit 20
 ```
 
 ### Резолв .ton домена
 ```
-exec: TONAPI_KEY=<key> bash {baseDir}/scripts/run.sh resolve <domain.ton>
+exec: bash {baseDir}/scripts/run.sh resolve <domain.ton>
 ```
 Ответ JSON: `{domain, address}`
 
 ### Jetton-балансы (USDT и др.)
 ```
-exec: EXTON_WALLET_ADDRESS=<addr> TONAPI_KEY=<key> bash {baseDir}/scripts/run.sh jettons
+exec: bash {baseDir}/scripts/run.sh jettons
 ```
 
 ### Текущий seqno
 ```
-exec: EXTON_WALLET_ADDRESS=<addr> TONAPI_KEY=<key> bash {baseDir}/scripts/run.sh seqno
+exec: bash {baseDir}/scripts/run.sh seqno
+```
+
+### Проверка новых транзакций
+```
+exec: bash {baseDir}/scripts/run.sh watch
+```
+Возвращает JSON: `new_incoming`, `new_outgoing`, `has_new`, `balance_ton`.
+Помнит последнюю проверку — показывает только НОВЫЕ транзакции.
+Если `has_new` = true → уведомить пользователя о каждой транзакции.
+Если `has_new` = false → ничего не делать.
+
+### Проверка последних транзакций (без фильтра)
+```
+exec: bash {baseDir}/scripts/run.sh check-tx
 ```
 
 ### Плагины и лимиты
