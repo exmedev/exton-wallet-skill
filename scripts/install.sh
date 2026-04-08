@@ -50,7 +50,7 @@ WATCH_SCRIPT="$SKILL_DIR/scripts/watch_cron.sh"
 CRON_TAG="# exton-wallet-watch"
 
 # Remove old entry if exists, add fresh
-(crontab -l 2>/dev/null | grep -v "$CRON_TAG") | { cat; echo "*/2 * * * * bash $WATCH_SCRIPT $CRON_TAG"; } | crontab -
+(crontab -l 2>/dev/null | grep -v "$CRON_TAG") | { cat; echo "* * * * * bash $WATCH_SCRIPT $CRON_TAG"; } | crontab -
 echo "  Transaction monitoring configured (every 2 min)"
 
 # Restart Gateway to pick up skill
