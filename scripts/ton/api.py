@@ -1,50 +1,40 @@
 """
-tonapi.io HTTP wrapper — balance, seqno, events, broadcast, DNS, GET methods.
+TON API wrapper — all requests go through Exton proxy at api.exton.app.
+
+User's TONAPI_KEY is NEVER stored on their device.
+Exton proxy handles authentication to tonapi.io internally.
 """
 
 import json
 import urllib.request
 import urllib.parse
 import urllib.error
-from pathlib import Path
 
-TONAPI_BASE = "https://tonapi.io"
+# All TON API calls go through our proxy — user never needs an API key
+EXTON_API_BASE = "https://api.exton.app/ton"
 
 
-def _get_api_key() -> str:
-    """Load TONAPI_KEY from env or ~/.exton/config.json."""
-    import os
-    key = os.environ.get("TONAPI_KEY", "")
-    if not key:
-        config_file = Path.home() / ".exton" / "config.json"
-        if config_file.exists():
-            config = json.loads(config_file.read_text())
-            key = config.get("tonapi_key", "")
-    return key
+_HEADERS = {
+    "Accept": "application/json",
+    "User-Agent": "ExtonWalletSkill/1.0",
+}
 
 
 def _api_get(path: str) -> dict:
-    """GET request to tonapi.io → parsed JSON."""
-    url = f"{TONAPI_BASE}{path}"
-    req = urllib.request.Request(url)
-    req.add_header("Accept", "application/json")
-    api_key = _get_api_key()
-    if api_key:
-        req.add_header("Authorization", f"Bearer {api_key}")
+    """GET request to Exton TON proxy."""
+    url = f"{EXTON_API_BASE}{path}"
+    req = urllib.request.Request(url, headers=_HEADERS)
     with urllib.request.urlopen(req, timeout=15) as resp:
         return json.loads(resp.read())
 
 
 def _api_post(path: str, body: dict) -> dict:
-    """POST request to tonapi.io → parsed JSON."""
-    url = f"{TONAPI_BASE}{path}"
+    """POST request to Exton TON proxy."""
+    url = f"{EXTON_API_BASE}{path}"
     data = json.dumps(body).encode()
-    req = urllib.request.Request(url, data=data, method="POST")
-    req.add_header("Content-Type", "application/json")
-    req.add_header("Accept", "application/json")
-    api_key = _get_api_key()
-    if api_key:
-        req.add_header("Authorization", f"Bearer {api_key}")
+    req = urllib.request.Request(url, data=data, method="POST", headers={
+        **_HEADERS, "Content-Type": "application/json"
+    })
     with urllib.request.urlopen(req, timeout=15) as resp:
         return json.loads(resp.read())
 
@@ -87,19 +77,15 @@ def get_transactions(address: str, limit: int = 20) -> list:
                 continue
             if action_type == "TonTransfer":
                 detail = action.get("TonTransfer", {})
-                sender = detail.get("sender", {}).get("address", "")
-                recipient = detail.get("recipient", {}).get("address", "")
-                amount = detail.get("amount", 0)
-                comment = detail.get("comment", "")
                 result.append({
                     "type": "ton_transfer",
                     "hash": event.get("event_id", ""),
                     "timestamp": event.get("timestamp", 0),
-                    "sender": sender,
-                    "recipient": recipient,
-                    "amount_nano": amount,
-                    "amount_ton": amount / 1e9,
-                    "comment": comment,
+                    "sender": detail.get("sender", {}).get("address", ""),
+                    "recipient": detail.get("recipient", {}).get("address", ""),
+                    "amount_nano": detail.get("amount", 0),
+                    "amount_ton": detail.get("amount", 0) / 1e9,
+                    "comment": detail.get("comment", ""),
                 })
     return result
 

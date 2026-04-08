@@ -10,6 +10,37 @@ from . import boc
 
 WALLET_ID = 0x29A9A317  # 698983191
 DEFAULT_VALID_SECONDS = 300  # 5 minutes
+# Standard TON V4R2 wallet contract code (from WalletV4R2.kt)
+# Keystone stores keys indexed by V4R2 address — this code is needed to compute that address.
+V4R2_CODE_BOC = "te6cckECFAEAAtQAART/APSkE/S88sgLAQIBIAIDAgFIBAUE+PKDCNcYINMf0x/THwL4I7vyZO1E0NMf0x/T//QE0VFDuvKhUVG68qIF+QFUEGT5EPKj+AAkpMjLH1JAyx9SMMv/UhD0AMntVPgPAdMHIcAAn2xRkyDXSpbTB9QC+wDoMOAhwAHjACHAAuMAAcADkTDjDQOkyMsfEssfy/8QERITAubQAdDTAyFxsJJfBOAi10nBIJJfBOAC0x8hghBwbHVnvSKCEGRzdHK9sJJfBeAD+kAwIPpEAcjKB8v/ydDtRNCBAUDXIfQEMFyBAQj0Cm+hMbOSXwfgBdM/yCWCEHBsdWe6kjgw4w0DghBkc3RyupJfBuMNBgcCASAICQB4AfoA9AQw+CdvIjBQCqEhvvLgUIIQcGx1Z4MesXCAGFAEywUmzxZY+gIZ9ADLaRfLH1Jgyz8gyYBA+wAGAIpQBIEBCPRZMO1E0IEBQNcgyAHPFvQAye1UAXKwjiOCEGRzdHKDHrFwgBhQBcsFUAPPFiP6AhPLassfyz/JgED7AJJfA+ICASAKCwBZvSQrb2omhAgKBrkPoCGEcNQICEekk30pkQzmkD6f+YN4EoAbeBAUiYcVnzGEAgFYDA0AEbjJftRNDXCx+AA9sp37UTQgQFA1yH0BDACyMoHy//J0AGBAQj0Cm+hMYAIBIA4PABmtznaiaEAga5Drhf/AABmvHfaiaEAQa5DrhY/AAG7SB/oA1NQi+QAFyMoHFcv/ydB3dIAYyMsFywIizxZQBfoCFMtrEszMyXP7AMhAFIEBCPRR8qcCAHCBAQjXGPoA0z/IVCBHgQEI9FHyp4IQbm90ZXB0gBjIywXLAlAGzxZQBPoCFMtqEssfyz/Jc/sAAgBsgQEI1xj6ANM/MFIkgQEI9Fnyp4IQZHN0cnB0gBjIywXLAlAFzxZQA/oCE8tqyx8Syz/Jc/sAAAr0AMntVGliJeU="
+
+
+def compute_v4r2_address(pubkey: bytes) -> str:
+    """Compute V4R2 wallet address for a pubkey.
+    Keystone stores keys indexed by V4R2 address — this is how it finds the signing key.
+    Uses standard V4R2 contract code (NOT Exton contract).
+    """
+    from . import address as addr_mod
+
+    v4r2_code = boc.from_base64(V4R2_CODE_BOC)
+
+    # V4R2 data cell: seqno(0,32) + wallet_id(32) + pubkey(256) + plugin_dict(0,1)
+    data_cell = (begin_cell()
+                 .store_uint(0, 32)
+                 .store_uint(WALLET_ID, 32)
+                 .store_bytes(pubkey)
+                 .store_uint(0, 1)
+                 .end_cell())
+
+    state_init = (begin_cell()
+                  .store_uint(0, 1)
+                  .store_uint(0, 1)
+                  .store_uint(1, 1).store_ref(v4r2_code)
+                  .store_uint(1, 1).store_ref(data_cell)
+                  .store_uint(0, 1)
+                  .end_cell())
+
+    return addr_mod.encode_address(0, state_init.hash, bounceable=False)
 
 
 def build_state_init(app_pubkey: bytes, pro_pubkey: bytes, code_boc: bytes) -> Cell:
@@ -47,6 +78,42 @@ def _parse_code(code_boc: bytes) -> Cell:
     return Cell(data=code_boc, bit_length=len(code_boc) * 8)
 
 
+def _build_internal_message(
+    to_workchain: int,
+    to_hash: bytes,
+    amount_nano: int,
+    bounce: bool = True,
+    comment: str = None,
+) -> Cell:
+    """Build internal message cell. Exact port from Kotlin WalletV4R2.buildInternalMessage()."""
+    b = begin_cell()
+    b._store_bit(False)       # int_msg_info tag: 0
+    b._store_bit(True)        # ihr_disabled
+    b._store_bit(bounce)      # bounce
+    b._store_bit(False)       # bounced
+    b.store_address_none()    # src: addr_none
+    b.store_address(to_workchain, to_hash)  # destination
+    b.store_coins(amount_nano)
+    b._store_bit(False)       # empty extra currencies
+    b.store_coins(0)          # ihr_fee
+    b.store_coins(0)          # fwd_fee
+    b.store_uint(0, 64)       # created_lt
+    b.store_uint(0, 32)       # created_at
+    b._store_bit(False)       # init: Nothing
+
+    if comment:
+        b._store_bit(True)    # body as reference
+        comment_cell = (begin_cell()
+                        .store_uint(0, 32)
+                        .store_bytes(comment.encode("utf-8"))
+                        .end_cell())
+        b.store_ref(comment_cell)
+    else:
+        b._store_bit(False)   # body inline empty
+
+    return b.end_cell()
+
+
 def build_send_payload(
     seqno: int,
     to_workchain: int,
@@ -54,39 +121,21 @@ def build_send_payload(
     amount_nano: int,
     comment: str = None,
     valid_until: int = None,
+    bounce: bool = True,
     mode: int = 3,
 ) -> Cell:
-    """Build signing payload for a single TON transfer (Op 0)."""
+    """Build signing payload for a single TON transfer (Op 0).
+    Exact port from Kotlin ExtonMultiSigContract.buildUnsignedTransfer()."""
     if valid_until is None:
         valid_until = int(time.time()) + DEFAULT_VALID_SECONDS
 
-    # Internal message body
-    if comment:
-        body = (begin_cell()
-                .store_uint(0, 32)  # text comment op
-                .end_cell())
-        # Store comment as UTF-8 bytes after op
-        body_builder = begin_cell().store_uint(0, 32)
-        for b in comment.encode("utf-8"):
-            body_builder.store_uint(b, 8)
-        body = body_builder.end_cell()
-    else:
-        body = None
-
-    # Internal message
-    msg_builder = (begin_cell()
-                   .store_uint(0b011000, 6)         # flags: non-bounce
-                   .store_address(to_workchain, to_hash)  # destination
-                   .store_coins(amount_nano)          # amount
-                   .store_uint(0, 1)                  # no StateInit
-                   )
-    if body:
-        msg_builder.store_uint(1, 1)  # body as ref
-        msg_builder.store_ref(body)
-    else:
-        msg_builder.store_uint(0, 1)  # no body
-
-    internal_msg = msg_builder.end_cell()
+    internal_msg = _build_internal_message(
+        to_workchain=to_workchain,
+        to_hash=to_hash,
+        amount_nano=amount_nano,
+        bounce=bounce,
+        comment=comment,
+    )
 
     # Signing payload: wallet_id + valid_until + seqno + op + mode + ref(msg)
     payload = (begin_cell()
@@ -94,7 +143,7 @@ def build_send_payload(
                .store_uint(valid_until, 32)
                .store_uint(seqno, 32)
                .store_uint(0, 8)         # op = 0 (send)
-               .store_uint(mode, 8)      # mode = 3
+               .store_uint(mode, 8)      # mode
                .store_ref(internal_msg)
                .end_cell())
 

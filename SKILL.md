@@ -173,6 +173,14 @@ exec: bash {baseDir}/scripts/run.sh plugins trigger <plugin_address>
 - Ежедневно: проверить все time-gated плагины
 - Каждые 90 дней: пинг inheritance/dead-man-switch
 
+## Обновление
+
+Если пользователь сообщает о проблеме или просит обновить:
+```
+exec: bash {baseDir}/scripts/update.sh
+```
+Это обновит skill до последней версии с GitHub и перезапустит Gateway.
+
 ## Безопасность
 
 - НИКОГДА не показывать содержимое `~/.exton/app_key.enc`
