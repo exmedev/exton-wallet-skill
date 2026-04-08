@@ -21,13 +21,13 @@ metadata: {"openclaw":{"requires":{"bins":["python3"]},"emoji":"💎","os":["dar
    Если пользователь не имеет ключ, использовать пустую строку.
 3. Запустить:
    ```
-   exec: python3 {baseDir}/scripts/main.py setup --recovery-code "<code>" --tonapi-key "<key>"
+   exec: bash {baseDir}/scripts/run.sh setup --recovery-code "<code>" --tonapi-key "<key>"
    ```
 4. Из ответа JSON взять `wallet_address` и сообщить:
    "✅ Кошелёк подключён: <wallet_address>"
    Затем показать баланс:
    ```
-   exec: python3 {baseDir}/scripts/main.py balance
+   exec: bash {baseDir}/scripts/run.sh balance
    ```
 
 ВАЖНО: Recovery Code содержит секретные данные. НИКОГДА не логировать, не показывать,
@@ -37,35 +37,35 @@ metadata: {"openclaw":{"requires":{"bins":["python3"]},"emoji":"💎","os":["dar
 
 ### Баланс
 ```
-exec: EXTON_WALLET_ADDRESS=<addr> TONAPI_KEY=<key> python3 {baseDir}/scripts/main.py balance
+exec: EXTON_WALLET_ADDRESS=<addr> TONAPI_KEY=<key> bash {baseDir}/scripts/run.sh balance
 ```
 Ответ JSON: `{balance_nano, balance_ton, status}`
 
 ### История транзакций
 ```
-exec: EXTON_WALLET_ADDRESS=<addr> TONAPI_KEY=<key> python3 {baseDir}/scripts/main.py history --limit 20
+exec: EXTON_WALLET_ADDRESS=<addr> TONAPI_KEY=<key> bash {baseDir}/scripts/run.sh history --limit 20
 ```
 
 ### Резолв .ton домена
 ```
-exec: TONAPI_KEY=<key> python3 {baseDir}/scripts/main.py resolve <domain.ton>
+exec: TONAPI_KEY=<key> bash {baseDir}/scripts/run.sh resolve <domain.ton>
 ```
 Ответ JSON: `{domain, address}`
 
 ### Jetton-балансы (USDT и др.)
 ```
-exec: EXTON_WALLET_ADDRESS=<addr> TONAPI_KEY=<key> python3 {baseDir}/scripts/main.py jettons
+exec: EXTON_WALLET_ADDRESS=<addr> TONAPI_KEY=<key> bash {baseDir}/scripts/run.sh jettons
 ```
 
 ### Текущий seqno
 ```
-exec: EXTON_WALLET_ADDRESS=<addr> TONAPI_KEY=<key> python3 {baseDir}/scripts/main.py seqno
+exec: EXTON_WALLET_ADDRESS=<addr> TONAPI_KEY=<key> bash {baseDir}/scripts/run.sh seqno
 ```
 
 ### Плагины и лимиты
 ```
-exec: python3 {baseDir}/scripts/main.py plugins list
-exec: python3 {baseDir}/scripts/main.py plugins limits
+exec: bash {baseDir}/scripts/run.sh plugins list
+exec: bash {baseDir}/scripts/run.sh plugins limits
 ```
 
 ## Отправка TON
@@ -92,7 +92,7 @@ exec: python3 {baseDir}/scripts/main.py plugins limits
 
 **Шаг 1: Построить TX и получить QR**
 ```
-exec: python3 {baseDir}/scripts/main.py send --to <address> --amount <nanotons> [--comment "..."]
+exec: bash {baseDir}/scripts/run.sh send --to <address> --amount <nanotons> [--comment "..."]
 ```
 Вернёт JSON с полем `qr_image_base64` — это PNG картинка в base64.
 
@@ -110,7 +110,7 @@ exec: python3 {baseDir}/scripts/main.py send --to <address> --amount <nanotons> 
 Пользователь отправляет ФОТО экрана Keystone с QR подписи.
 Сохранить фото в файл, затем:
 ```
-exec: python3 {baseDir}/scripts/main.py sign-submit --photo <path_to_photo>
+exec: bash {baseDir}/scripts/run.sh sign-submit --photo <path_to_photo>
 ```
 → Декодирует QR из фото → извлекает Ed25519 подпись → собирает signed BOC → broadcast в TON
 
@@ -131,16 +131,16 @@ Hash: abc123..."
 
 **Шаг 1: Deploy плагин**
 ```
-exec: python3 {baseDir}/scripts/main.py plugins deploy --type whitelist --addresses "UQ1...,UQ2..."
+exec: bash {baseDir}/scripts/run.sh plugins deploy --type whitelist --addresses "UQ1...,UQ2..."
 ```
 → JSON с `qr_image_base64` → отправить QR в чат → пользователь подписывает Keystone → фото обратно
 ```
-exec: python3 {baseDir}/scripts/main.py sign-submit --photo <path>
+exec: bash {baseDir}/scripts/run.sh sign-submit --photo <path>
 ```
 
 **Шаг 2: Install плагин на кошелёк**
 ```
-exec: python3 {baseDir}/scripts/main.py plugins install --plugin-address <addr>
+exec: bash {baseDir}/scripts/run.sh plugins install --plugin-address <addr>
 ```
 → QR → подпись → фото → sign-submit
 
@@ -152,7 +152,7 @@ exec: python3 {baseDir}/scripts/main.py plugins install --plugin-address <addr>
 Плагины subscription, payroll, domain-renewal, timelock, inheritance, dead-man-switch — могут быть вызваны кем угодно (trustless). Для trigger нужен только газ (~0.05 TON).
 
 ```
-exec: python3 {baseDir}/scripts/main.py plugins trigger <plugin_address>
+exec: bash {baseDir}/scripts/run.sh plugins trigger <plugin_address>
 ```
 
 Рекомендуемые cron-задачи:

@@ -21,20 +21,6 @@ import os
 # Add scripts dir to path
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
-SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
-SKILL_DIR = os.path.dirname(SCRIPT_DIR)
-
-def find_wallet_code():
-    """Find exton_multisig.code BOC file."""
-    paths = [
-        os.path.join(SKILL_DIR, 'resources', 'exton_multisig.code'),
-        os.path.expanduser('~/.exton/exton_multisig.code'),
-    ]
-    for p in paths:
-        if os.path.exists(p):
-            return open(p).read().strip()
-    raise FileNotFoundError('exton_multisig.code not found. Expected in: ' + ', '.join(paths))
-
 
 def cmd_setup(args):
     """Setup wallet from Recovery Code."""
@@ -56,8 +42,12 @@ def cmd_setup(args):
 
     # Compute wallet address from StateInit
     wallet_address = ""
-    try:
-            code_cell = from_base64(find_wallet_code())
+    for code_path in [
+        "/Users/exme/exton/resources/wallet/exton_multisig.code",
+        os.path.expanduser("~/.exton/exton_multisig.code"),
+    ]:
+        if os.path.exists(code_path):
+            code_cell = from_base64(open(code_path).read().strip())
             data_cell = (begin_cell()
                 .store_bytes(keys["tweaked_app_pubkey"])
                 .store_bytes(keys["pro_pubkey"])
@@ -70,9 +60,7 @@ def cmd_setup(args):
                 .store_uint(0, 1)
                 .end_cell())
             wallet_address = encode_address(0, state_init.hash, bounceable=False)
-    except FileNotFoundError as e:
-            print(json.dumps({"error": str(e)}))
-            return
+            break
 
     tonapi_key = args.get("tonapi_key", os.environ.get("TONAPI_KEY", ""))
 
@@ -342,7 +330,7 @@ def cmd_sign_submit(args):
         code_b64 = open(os.path.join(os.path.dirname(__file__), '..', '..', 'resources', 'wallet', 'exton_multisig.code')).read().strip()
         # Try multiple paths for the code file
         for code_path in [
-            os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'resources', 'exton_multisig.code'),
+            '/Users/exme/exton/resources/wallet/exton_multisig.code',
             os.path.expanduser('~/.exton/exton_multisig.code'),
         ]:
             if os.path.exists(code_path):
