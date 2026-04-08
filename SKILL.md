@@ -1,0 +1,187 @@
+---
+name: exton-wallet
+description: Manage Exton TON crypto wallet — send TON/jettons, manage plugins (whitelist, daily-limit, subscriptions, payroll), sign transactions via Keystone 3 Pro QR.
+metadata: {"openclaw":{"requires":{"bins":["python3"]},"emoji":"💎","os":["darwin","linux"],"install":[{"id":"deps","kind":"download","label":"Install Exton dependencies","bins":["python3"],"command":"bash {baseDir}/scripts/install.sh"}]}}
+---
+
+# Exton Wallet Skill
+
+Управление криптокошельком Exton на блокчейне TON. Приватный ключ никогда не покидает аппаратный кошелёк Keystone 3 Pro.
+
+## Когда использовать
+
+Пользователь просит: баланс, отправить TON/токены/NFT, настроить плагины (whitelist, лимиты, подписки, зарплаты), проверить лимиты, историю транзакций, резолвить .ton домен.
+
+## Настройка (первый запуск)
+
+Если файл `~/.exton/config.json` не существует, провести настройку в чате:
+
+1. Спросить: "Введите Recovery Code вашего Exton MultiSig кошелька (71 символ)"
+2. Спросить: "Введите TONAPI_KEY (получить бесплатно на tonconsole.com)"
+   Если пользователь не имеет ключ, использовать пустую строку.
+3. Запустить:
+   ```
+   exec: python3 {baseDir}/scripts/main.py setup --recovery-code "<code>" --tonapi-key "<key>"
+   ```
+4. Из ответа JSON взять `wallet_address` и сообщить:
+   "✅ Кошелёк подключён: <wallet_address>"
+   Затем показать баланс:
+   ```
+   exec: python3 {baseDir}/scripts/main.py balance
+   ```
+
+ВАЖНО: Recovery Code содержит секретные данные. НИКОГДА не логировать, не показывать,
+не сохранять его в чат-историю. После setup код больше не нужен.
+
+## Чтение (без подписи, без ключей)
+
+### Баланс
+```
+exec: EXTON_WALLET_ADDRESS=<addr> TONAPI_KEY=<key> python3 {baseDir}/scripts/main.py balance
+```
+Ответ JSON: `{balance_nano, balance_ton, status}`
+
+### История транзакций
+```
+exec: EXTON_WALLET_ADDRESS=<addr> TONAPI_KEY=<key> python3 {baseDir}/scripts/main.py history --limit 20
+```
+
+### Резолв .ton домена
+```
+exec: TONAPI_KEY=<key> python3 {baseDir}/scripts/main.py resolve <domain.ton>
+```
+Ответ JSON: `{domain, address}`
+
+### Jetton-балансы (USDT и др.)
+```
+exec: EXTON_WALLET_ADDRESS=<addr> TONAPI_KEY=<key> python3 {baseDir}/scripts/main.py jettons
+```
+
+### Текущий seqno
+```
+exec: EXTON_WALLET_ADDRESS=<addr> TONAPI_KEY=<key> python3 {baseDir}/scripts/main.py seqno
+```
+
+### Плагины и лимиты
+```
+exec: python3 {baseDir}/scripts/main.py plugins list
+exec: python3 {baseDir}/scripts/main.py plugins limits
+```
+
+## Отправка TON
+
+### Два режима
+
+**Режим 1: Через плагин (автоматически, если адрес в whitelist и в пределах лимита)**
+Не требует Keystone подпись. Агент подписывает exton_app_key автоматически.
+
+**Режим 2: Прямой перевод (с Keystone QR)**
+Требует физическую подпись на Keystone 3 Pro.
+
+### Алгоритм принятия решения
+
+1. Проверить: есть ли whitelist плагин?
+2. Если да — проверить адрес в whitelist через GET-метод
+3. Проверить daily-limit: remainingToday() >= amount?
+4. Если оба ✓ → Режим 1 (автоматически)
+5. Иначе → Режим 2 (QR + Keystone)
+
+### Режим 2: QR-подпись через чат (Telegram/WhatsApp/Discord)
+
+Весь flow происходит В ЧАТЕ — QR отправляется как картинка, подпись приходит как фото.
+
+**Шаг 1: Построить TX и получить QR**
+```
+exec: python3 {baseDir}/scripts/main.py send --to <address> --amount <nanotons> [--comment "..."]
+```
+Вернёт JSON с полем `qr_image_base64` — это PNG картинка в base64.
+
+**Шаг 2: Отправить QR пользователю в чат**
+Декодировать base64 → отправить как изображение в Telegram/WhatsApp/Discord.
+Сопроводить текстом:
+"📱 Отсканируйте QR на Keystone 3 Pro:
+1. Откройте камеру Keystone → сканируйте QR с экрана
+2. Проверьте детали TX на экране Keystone
+3. Подтвердите кнопкой
+4. Keystone покажет QR подписи
+5. Сфотографируйте экран Keystone и отправьте фото в этот чат"
+
+**Шаг 3: Получить фото подписи от пользователя**
+Пользователь отправляет ФОТО экрана Keystone с QR подписи.
+Сохранить фото в файл, затем:
+```
+exec: python3 {baseDir}/scripts/main.py sign-submit --photo <path_to_photo>
+```
+→ Декодирует QR из фото → извлекает Ed25519 подпись → собирает signed BOC → broadcast в TON
+
+**Шаг 4: Подтвердить результат**
+"✅ Транзакция отправлена!
+Сумма: 50 TON
+Получатель: wallet.ton (UQx...)
+Hash: abc123..."
+
+ВАЖНО: Между шагом 2 и 3 ждать ответа пользователя. НЕ продолжать без фото подписи.
+
+4. Подтвердить результат.
+
+## Установка плагина (с Keystone, однократно)
+
+Каждый плагин = deploy через Factory + install на кошелёк = 2 QR-подписи.
+Весь flow через чат — QR как картинки, подписи как фото.
+
+**Шаг 1: Deploy плагин**
+```
+exec: python3 {baseDir}/scripts/main.py plugins deploy --type whitelist --addresses "UQ1...,UQ2..."
+```
+→ JSON с `qr_image_base64` → отправить QR в чат → пользователь подписывает Keystone → фото обратно
+```
+exec: python3 {baseDir}/scripts/main.py sign-submit --photo <path>
+```
+
+**Шаг 2: Install плагин на кошелёк**
+```
+exec: python3 {baseDir}/scripts/main.py plugins install --plugin-address <addr>
+```
+→ QR → подпись → фото → sign-submit
+
+Пользователю: "Настройка завершена. 2 подписи Keystone потребовалось.
+Теперь переводы на эти адреса выполняются автоматически без Keystone."
+
+## Автоматические trigger (cron)
+
+Плагины subscription, payroll, domain-renewal, timelock, inheritance, dead-man-switch — могут быть вызваны кем угодно (trustless). Для trigger нужен только газ (~0.05 TON).
+
+```
+exec: python3 {baseDir}/scripts/main.py plugins trigger <plugin_address>
+```
+
+Рекомендуемые cron-задачи:
+- Ежедневно: проверить все time-gated плагины
+- Каждые 90 дней: пинг inheritance/dead-man-switch
+
+## Безопасность
+
+- НИКОГДА не показывать содержимое `~/.exton/app_key.enc`
+- НИКОГДА не выводить приватные ключи или Recovery Code в чат
+- НИКОГДА не отправлять Recovery Code по сети
+- Для операций вне плагинов ВСЕГДА требовать QR-подпись Keystone
+- При ошибке подписи — НЕ повторять, сообщить пользователю
+- Плагины работают в рамках on-chain constraints — это НЕЛЬЗЯ обойти
+- Whitelist: только заранее одобренные адреса (on-chain dict)
+- Daily Limit: максимум N TON за 24 часа (on-chain counter с auto-reset)
+
+## Доступные плагины
+
+| Плагин | Назначение | Trigger |
+|--------|-----------|---------|
+| whitelist | Только одобренные адреса | Owner |
+| daily-limit | Макс N TON/сутки | Owner |
+| subscription | Регулярный фиксированный платёж | Anyone (по времени) |
+| payroll | Зарплаты команде | Anyone (по времени) |
+| timelock | Разовый платёж по дате | Anyone (по времени) |
+| inheritance | Всё бенефициару при неактивности | Anyone / Owner (ping) |
+| dead-man-switch | Распределение по % при неактивности | Anyone / Owner (ping) |
+| domain-renewal | Продление .ton доменов | Anyone (по времени) |
+| auto-swap | Jetton → TON через DEX | Owner |
+| staking-manager | Авто-стейкинг по порогам | Owner |
+| split-payment | Распределение суммы по % | Owner |
