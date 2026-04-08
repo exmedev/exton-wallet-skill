@@ -50,6 +50,12 @@ except:
     print('  pyzbar: not available (QR decode disabled)')
 "
 
+# Restart OpenClaw Gateway to pick up new skill
+if command -v openclaw &>/dev/null; then
+    echo "Restarting OpenClaw Gateway..."
+    openclaw gateway restart 2>/dev/null || true
+fi
+
 echo ""
 echo "Exton Wallet Skill installed!"
-echo "Say: 'Connect my Exton wallet' to get started."
+echo "Start a new session (/new) and say: 'Connect my Exton wallet'"
