@@ -20,8 +20,6 @@ import os
 
 # Add scripts dir to path
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-
-
 def cmd_setup(args):
     """Setup wallet from Recovery Code."""
     from crypto.keys import recovery_code_to_keys
@@ -43,7 +41,7 @@ def cmd_setup(args):
     # Compute wallet address from StateInit
     wallet_address = ""
     for code_path in [
-        "/Users/exme/exton/resources/wallet/exton_multisig.code",
+        
         os.path.expanduser("~/.exton/exton_multisig.code"),
     ]:
         if os.path.exists(code_path):
@@ -81,8 +79,6 @@ def cmd_setup(args):
         "tweaked_app_pubkey": keys["tweaked_app_pubkey"].hex(),
         "config_dir": str(EXTON_DIR),
     }))
-
-
 def cmd_balance(args):
     """Get wallet balance."""
     from crypto.storage import load_config
@@ -99,8 +95,6 @@ def cmd_balance(args):
 
     result = get_balance(address)
     print(json.dumps(result))
-
-
 def cmd_history(args):
     """Get transaction history."""
     from crypto.storage import load_config
@@ -112,8 +106,6 @@ def cmd_history(args):
 
     result = get_transactions(address, limit)
     print(json.dumps(result, indent=2))
-
-
 def cmd_resolve(args):
     """Resolve .ton domain."""
     from ton.api import resolve_domain
@@ -125,8 +117,6 @@ def cmd_resolve(args):
 
     address = resolve_domain(domain)
     print(json.dumps({"domain": domain, "address": address}))
-
-
 def cmd_jettons(args):
     """Get jetton balances."""
     from crypto.storage import load_config
@@ -137,8 +127,6 @@ def cmd_jettons(args):
 
     result = get_jettons(address)
     print(json.dumps(result, indent=2))
-
-
 def cmd_seqno(args):
     """Get current seqno."""
     from crypto.storage import load_config
@@ -149,8 +137,6 @@ def cmd_seqno(args):
 
     seqno = get_seqno(address)
     print(json.dumps({"seqno": seqno}))
-
-
 def cmd_plugins(args):
     """Plugin operations."""
     subcmd = args.get("subcmd", "list")
@@ -184,8 +170,6 @@ def cmd_plugins(args):
         print(json.dumps(result, indent=2))
     else:
         print(json.dumps({"error": f"Unknown plugin command: {subcmd}"}))
-
-
 def cmd_send(args):
     """Build unsigned TX, sign app_key, generate QR for Keystone."""
     import base64 as b64lib
@@ -282,8 +266,6 @@ def cmd_send(args):
         "comment": comment,
         "message": "Отсканируйте QR на Keystone 3 Pro и отправьте фото подписи в чат",
     }))
-
-
 def cmd_sign_submit(args):
     """Decode Keystone signature from photo/UR, assemble signed BOC, broadcast."""
     import base64 as b64lib
@@ -330,7 +312,7 @@ def cmd_sign_submit(args):
         code_b64 = open(os.path.join(os.path.dirname(__file__), '..', '..', 'resources', 'wallet', 'exton_multisig.code')).read().strip()
         # Try multiple paths for the code file
         for code_path in [
-            '/Users/exme/exton/resources/wallet/exton_multisig.code',
+            
             os.path.expanduser('~/.exton/exton_multisig.code'),
         ]:
             if os.path.exists(code_path):
@@ -376,8 +358,6 @@ def cmd_sign_submit(args):
         "result": result,
         "boc_length": len(b64lib.b64decode(boc_b64)),
     }))
-
-
 def main():
     if len(sys.argv) < 2:
         print(__doc__)
@@ -427,7 +407,5 @@ def main():
     else:
         print(json.dumps({"error": f"Unknown command: {command}"}))
         sys.exit(1)
-
-
 if __name__ == "__main__":
     main()
