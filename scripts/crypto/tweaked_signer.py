@@ -12,11 +12,7 @@ This produces valid Ed25519 signatures that verify against the tweaked public ke
 import hashlib
 import struct
 
-from nacl.bindings import (
-    crypto_scalarmult_ed25519_base_noclamp,
-    crypto_core_ed25519_scalar_reduce,
-    crypto_core_ed25519_scalar_add,
-)
+from nacl.bindings import crypto_scalarmult_ed25519_base_noclamp
 
 # Ed25519 group order L
 L = 2**252 + 27742317777372353535851937790883648493

@@ -150,29 +150,6 @@ exec: bash {baseDir}/scripts/run.sh check-tx
 
 4. Подтвердить результат.
 
-## Установка плагина (с Keystone, однократно)
-
-Каждый плагин = deploy через Factory + install на кошелёк = 2 QR-подписи.
-Весь flow через чат — QR как картинки, подписи как фото.
-
-**Шаг 1: Deploy плагин**
-```
-exec: bash {baseDir}/scripts/run.sh plugins deploy --type whitelist --addresses "UQ1...,UQ2..."
-```
-→ JSON с `qr_image_base64` → отправить QR в чат → пользователь подписывает Keystone → фото обратно
-```
-exec: bash {baseDir}/scripts/run.sh sign-submit --photo <path>
-```
-
-**Шаг 2: Install плагин на кошелёк**
-```
-exec: bash {baseDir}/scripts/run.sh plugins install --plugin-address <addr>
-```
-→ QR → подпись → фото → sign-submit
-
-Пользователю: "Настройка завершена. 2 подписи Keystone потребовалось.
-Теперь переводы на эти адреса выполняются автоматически без Keystone."
-
 ## Мониторинг входящих транзакций
 
 Команда `watch` проверяет новые транзакции с момента последней проверки:
@@ -188,27 +165,9 @@ exec: bash {baseDir}/scripts/run.sh watch
 
 Если `has_new` = false — НЕ отправлять ничего, молча завершить.
 
-### Рекомендуемый cron (OpenClaw Gateway)
-```json
-{
-  "cron": [
-    {
-      "schedule": "*/2 * * * *",
-      "skill": "exton-wallet",
-      "prompt": "Проверь новые транзакции командой watch. Если есть новые — уведоми пользователя. Если нет — молча заверши."
-    }
-  ]
-}
-```
-Каждые 2 минуты. Расход токенов только при наличии новых транзакций.
-
-## Автоматические trigger плагинов (cron)
-
-Плагины subscription, payroll, domain-renewal, timelock, inheritance, dead-man-switch — могут быть вызваны кем угодно (trustless). Для trigger нужен только газ (~0.05 TON).
-
-```
-exec: bash {baseDir}/scripts/run.sh plugins trigger <plugin_address>
-```
+Мониторинг работает автоматически — системный cron каждую минуту проверяет новые
+транзакции и отправляет уведомление в Telegram. Настраивается при install.sh, 
+пользователю ничего делать не нужно. Расход AI-токенов: ноль.
 
 ## Обновление
 

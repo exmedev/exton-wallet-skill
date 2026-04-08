@@ -43,40 +43,6 @@ def compute_v4r2_address(pubkey: bytes) -> str:
     return addr_mod.encode_address(0, state_init.hash, bounceable=False)
 
 
-def build_state_init(app_pubkey: bytes, pro_pubkey: bytes, code_boc: bytes) -> Cell:
-    """Build Exton MultiSig StateInit cell."""
-    code_cell = Cell.from_boc(code_boc) if hasattr(Cell, "from_boc") else _parse_code(code_boc)
-
-    data = (begin_cell()
-            .store_bytes(app_pubkey)     # 256 bits
-            .store_bytes(pro_pubkey)     # 256 bits
-            .store_uint(0, 32)           # seqno = 0
-            .store_uint(1, 32)           # code_version = 1
-            .store_uint(0, 1)            # has_plugins = false
-            .end_cell())
-
-    state_init = (begin_cell()
-                  .store_uint(0, 1)      # split_depth = false
-                  .store_uint(0, 1)      # special = false
-                  .store_uint(1, 1)      # code present = true
-                  .store_ref(code_cell)
-                  .store_uint(1, 1)      # data present = true
-                  .store_ref(data)
-                  .store_uint(0, 1)      # lib dict = false
-                  .end_cell())
-
-    return state_init
-
-
-def _parse_code(code_boc: bytes) -> Cell:
-    """Minimal BOC parser to extract code cell."""
-    # Use the boc module for proper deserialization
-    # For now, create a raw cell from BOC bytes
-    from . import boc as boc_mod
-    # Simple approach: the BOC IS the code cell
-    # We need proper deserialization — for now, use a placeholder
-    return Cell(data=code_boc, bit_length=len(code_boc) * 8)
-
 
 def _build_internal_message(
     to_workchain: int,

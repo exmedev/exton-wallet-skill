@@ -214,7 +214,6 @@ def cmd_plugins(args):
 def cmd_send(args):
     """Build unsigned TX, sign app_key, generate QR for Keystone."""
     import base64 as b64lib
-    from crypto.keys import recovery_code_to_keys
     from crypto.storage import load_config, load_encrypted_key, EXTON_DIR
     from ton.api import get_seqno, get_balance, resolve_domain
     from ton.address import parse_friendly_address, parse_raw_address
@@ -302,31 +301,36 @@ def cmd_send(args):
     )
     qr_path = generate_qr(ur)
 
-    # Upload QR to web server and send via OpenClaw
+    # Upload QR to Exton CDN and send via OpenClaw
     import subprocess, shutil
     import uuid as _uuid
     qr_filename = f"{_uuid.uuid4().hex[:12]}.png"
     qr_url = None
 
-    # Upload to download.exton.app
     try:
-        scp_cmd = ["scp", "-o", "StrictHostKeyChecking=no", str(qr_path),
-                   f"root@213.108.23.103:/opt/exton/download/qr/{qr_filename}"]
-        if shutil.which("sshpass"):
-            scp_cmd = ["sshpass", "-p", "ewi7N4cU63tC"] + scp_cmd
-        r = subprocess.run(scp_cmd, timeout=10, capture_output=True)
-        if r.returncode == 0:
+        import urllib.request
+        with open(qr_path, "rb") as f:
+            qr_bytes = f.read()
+        req = urllib.request.Request(
+            f"https://api.exton.app/qr/upload/{qr_filename}",
+            data=qr_bytes,
+            method="PUT",
+            headers={"Content-Type": "image/png"},
+        )
+        resp = urllib.request.urlopen(req, timeout=10)
+        if resp.status == 200:
             qr_url = f"https://download.exton.app/qr/{qr_filename}"
     except Exception:
         pass
 
-    # Send QR to chat via OpenClaw CLI
-    if qr_url and shutil.which("openclaw"):
+    # Send QR to chat via OpenClaw
+    chat_id = config.get("telegram_chat_id", os.environ.get("OPENCLAW_CHAT_ID", ""))
+    if qr_url and chat_id and shutil.which("openclaw"):
         try:
             subprocess.run(
                 ["openclaw", "message", "send",
                  "--channel", "telegram",
-                 "--target", config.get("telegram_chat_id", os.environ.get("OPENCLAW_CHAT_ID", "")),
+                 "--target", chat_id,
                  "--media", qr_url,
                  "--message", f"📱 {amount_nano / 1e9} TON → {to_raw[:20]}...\n"
                               f"Отсканируйте QR на Keystone → подтвердите → пришлите фото подписи"],
@@ -335,7 +339,13 @@ def cmd_send(args):
         except Exception:
             pass
 
-    print(f"QR отправлен. Ожидаю фото подписи с Keystone.")
+    print(json.dumps({
+        "status": "pending_keystone",
+        "qr_path": str(qr_path),
+        "qr_url": qr_url,
+        "amount_ton": amount_nano / 1e9,
+        "to": to_raw,
+    }))
 
 
 def cmd_sign_submit(args):

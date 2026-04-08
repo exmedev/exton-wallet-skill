@@ -1,63 +1,72 @@
 # Exton Wallet — OpenClaw Skill
 
-Управляй криптокошельком Exton на TON через AI-агента. Приватный ключ никогда не покидает аппаратный кошелёк Keystone 3 Pro.
+Manage your [Exton](https://exton.app) TON crypto wallet through an AI agent. Sign transactions with Keystone 3 Pro hardware wallet — your private key never leaves the device.
 
-## Установка
+## Quick Start
 
 ```bash
-# 1. Скопировать skill в OpenClaw
-cp -r /path/to/exton/skill ~/.openclaw/skills/exton-wallet
+git clone https://github.com/exmedev/exton-wallet-skill.git \
+  ~/.openclaw/skills/exton-wallet
 
-# 2. Зависимости установятся автоматически при первом запуске
-#    Или вручную:
 bash ~/.openclaw/skills/exton-wallet/scripts/install.sh
 ```
 
-## Подключение кошелька
+Start a new session (`/new`) and say: **"Connect my Exton wallet"**
 
-В чате с OpenClaw:
-```
-"Подключи мой Exton кошелёк"
-```
+The agent will ask for your Recovery Code (from Exton Android app: Settings > MultiSig > Recovery Code). That's it.
 
-Агент попросит Recovery Code — его можно получить в Exton Android App:
-Settings → Exton MultiSig → Recovery Code.
+## Features
 
-## Что умеет
+| Feature | Keystone Required? |
+|---------|--------------------|
+| Balance, history, jettons | No |
+| Resolve .ton domains | No |
+| Transaction notifications | No (automatic) |
+| Send TON | Yes (QR in chat) |
 
-**Без Keystone (автоматически):**
-- Баланс, история, jettons
-- Резолв .ton доменов
-- Статус плагинов и лимитов
-- Отправка через whitelist + daily-limit (после однократной настройки)
-
-**С Keystone (QR в чате):**
-- Любые переводы TON/jettons/NFT
-- Установка и удаление плагинов
-- Ротация ключей
-
-## Как работает подпись
+## How Signing Works
 
 ```
-Ты: "Отправь 100 TON на wallet.ton"
-     ↓
-Агент: [QR картинка] "Отсканируйте на Keystone"
-     ↓
-Ты: [фото экрана Keystone с QR подписи]
-     ↓
-Агент: "✅ Отправлено 100 TON"
+You: "Send 100 TON to wallet.ton"
+
+Agent: [QR image in chat]
+       "Scan with Keystone 3 Pro"
+
+You: [photo of Keystone signature screen]
+
+Agent: "Sent 100 TON. Hash: abc123..."
 ```
 
-## Безопасность
+Three messages. Everything in chat. Private key never leaves Keystone.
 
-- Приватный ключ Keystone **никогда** не покидает устройство
-- On-chain плагины ограничивают автоматические операции (whitelist, лимиты)
-- Даже при компрометации сервера — потери ограничены лимитами плагинов
-- Мгновенный отзыв доступа: удаление плагина одной подписью Keystone
+## Transaction Notifications
 
-## Требования
+Incoming and outgoing transactions are monitored every minute after install. Notifications arrive in Telegram with zero AI token cost.
+
+## Updating
+
+```bash
+bash ~/.openclaw/skills/exton-wallet/scripts/update.sh
+```
+
+## Security
+
+- Private key stays in Keystone Secure Element
+- Recovery Code encrypted with AES-256-GCM on disk
+- All API calls through Exton proxy (no user API keys needed)
+- Keystone shows transaction details on its own screen
+
+## Requirements
 
 - Python 3.9+
-- Keystone 3 Pro (аппаратный кошелёк)
-- Exton Wallet Android App (для создания MultiSig кошелька)
-- OpenClaw с Telegram/WhatsApp каналом
+- [OpenClaw](https://github.com/openclaw/openclaw) with Telegram channel
+- [Keystone 3 Pro](https://keyst.one) hardware wallet
+- [Exton Wallet](https://download.exton.app) Android app
+
+## Architecture
+
+See [ARCHITECTURE.md](ARCHITECTURE.md) for technical details.
+
+## License
+
+MIT License. See [LICENSE](LICENSE).
