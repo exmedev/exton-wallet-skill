@@ -48,6 +48,15 @@ except:
 # Restart Gateway to pick up skill
 if command -v openclaw &>/dev/null; then
     openclaw gateway restart 2>/dev/null || true
+    sleep 2
+
+    # Setup cron for transaction monitoring (every 2 minutes)
+    # Remove old cron if exists, then add fresh
+    openclaw cron rm --name exton-watch 2>/dev/null || true
+    openclaw cron add --name exton-watch \
+        --cron "*/2 * * * *" \
+        --message "Run exton-wallet watch command. If has_new=true, notify user about each incoming/outgoing transaction with amount and sender/recipient address. If has_new=false, do nothing silently." \
+        2>/dev/null || echo "Note: cron setup requires paired Gateway. Pair first, then run install.sh again."
 fi
 
 echo ""
