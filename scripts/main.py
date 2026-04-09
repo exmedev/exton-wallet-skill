@@ -37,6 +37,127 @@ def _find_code_file(filename):
     raise FileNotFoundError(f"{filename} not found in: {paths}")
 
 
+def cmd_create_wallet(args):
+    """Create new Exton MultiSig wallet from Keystone QR photo."""
+    from crypto.keys import (
+        generate_app_secret, derive_seed, seed_to_keypair,
+        apply_tweak, encode_recovery_code, format_recovery_code,
+    )
+    from crypto.storage import save_encrypted_key, save_config, EXTON_DIR
+    from ton.address import encode_address
+    from ton.cell import begin_cell
+    from ton.boc import from_base64
+
+    # Step 1: Get Keystone pubkey from QR photo
+    photo_path = args.get("photo", "")
+    ur_string = args.get("ur", "")
+
+    if photo_path:
+        from keystone.qr import decode_qr_from_image
+        ur_string = decode_qr_from_image(photo_path)
+
+    if not ur_string:
+        print(json.dumps({"error": "Required: --photo <path> (photo of Keystone crypto-hdkey QR)"}))
+        return
+
+    from keystone.ur import parse_crypto_hdkey
+    try:
+        account = parse_crypto_hdkey(ur_string)
+    except Exception as e:
+        print(json.dumps({"error": f"Failed to parse Keystone QR: {e}"}))
+        return
+
+    pro_pubkey = account["pubkey"]
+    cosigner_path = account.get("path") or "m/44'/607'/0'"
+    cosigner_xfp = account.get("xfp")
+
+    # Step 2: Generate app secret + derive keys
+    app_secret = generate_app_secret()  # 12 random bytes
+    app_seed = derive_seed(app_secret)   # SHA-256(secret || salt)
+    app_privkey, app_pubkey = seed_to_keypair(app_seed)
+
+    # Step 3: Compute address via server (tweak=0 for instant result)
+    import urllib.request, urllib.error
+    tweak_hex = "0000000000000000"
+    try:
+        req_data = json.dumps({
+            "exton_app_pubkey": app_pubkey.hex(),
+            "exton_pro_pubkey": pro_pubkey.hex(),
+            "tweak": tweak_hex,
+        }).encode()
+        req = urllib.request.Request(
+            "https://multisig.exton.app/api/compute-address",
+            data=req_data,
+            method="POST",
+            headers={"Content-Type": "application/json"},
+        )
+        resp = urllib.request.urlopen(req, timeout=15)
+        result = json.loads(resp.read())
+        wallet_address = result.get("contractAddress") or result.get("contract_address", "")
+    except Exception as e:
+        # Fallback: compute locally
+        tweak_bytes = bytes.fromhex(tweak_hex)
+        tweaked_app_pubkey = apply_tweak(app_pubkey, tweak_bytes)
+
+        try:
+            code_cell = from_base64(_find_code_file("exton_multisig.code"))
+        except FileNotFoundError:
+            print(json.dumps({"error": "exton_multisig.code not found"}))
+            return
+
+        data_cell = (begin_cell()
+            .store_bytes(tweaked_app_pubkey)
+            .store_bytes(pro_pubkey)
+            .store_uint(0, 32).store_uint(1, 32).store_uint(0, 1)
+            .end_cell())
+        state_init = (begin_cell()
+            .store_uint(0, 1).store_uint(0, 1)
+            .store_uint(1, 1).store_ref(code_cell)
+            .store_uint(1, 1).store_ref(data_cell)
+            .store_uint(0, 1)
+            .end_cell())
+        wallet_address = encode_address(0, state_init.hash, bounceable=False)
+
+    if not wallet_address:
+        print(json.dumps({"error": "Failed to compute wallet address"}))
+        return
+
+    # Step 4: Create Recovery Code
+    tweak_bytes = bytes.fromhex(tweak_hex)
+    recovery_code = encode_recovery_code(app_secret, tweak_bytes, pro_pubkey)
+    recovery_formatted = format_recovery_code(recovery_code)
+
+    # Step 5: Save wallet config + encrypted key
+    password = args.get("password", "exton")
+    save_encrypted_key(app_privkey, password)
+
+    tweaked_app_pubkey = apply_tweak(app_pubkey, tweak_bytes)
+
+    config = {
+        "wallet_address": wallet_address,
+        "app_pubkey": app_pubkey.hex(),
+        "tweaked_app_pubkey": tweaked_app_pubkey.hex(),
+        "pro_pubkey": pro_pubkey.hex(),
+        "tweak": tweak_hex,
+        "cosigner_path": cosigner_path,
+        "cosigner_xfp": cosigner_xfp,
+    }
+    save_config(config)
+
+    print(json.dumps({
+        "status": "ok",
+        "wallet_address": wallet_address,
+        "recovery_code": recovery_formatted,
+        "message": (
+            f"Кошелёк создан!\n\n"
+            f"Адрес: {wallet_address}\n\n"
+            f"Recovery Code (СОХРАНИТЕ!):\n{recovery_formatted}\n\n"
+            f"Этот код — единственный способ восстановить кошелёк. "
+            f"Запишите его и храните в надёжном месте."
+        ),
+    }))
+
+
 def cmd_setup(args):
     """Setup wallet from Recovery Code + TONAPI_KEY."""
     from crypto.keys import recovery_code_to_keys
@@ -612,6 +733,7 @@ def main():
             i += 1
 
     commands = {
+        "create-wallet": cmd_create_wallet,
         "setup": cmd_setup,
         "balance": cmd_balance,
         "history": cmd_history,

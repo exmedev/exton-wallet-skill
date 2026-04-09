@@ -228,6 +228,63 @@ def bytewords_decode(encoded: str) -> bytes:
 # ton-sign-request encoding (Exton → Keystone)
 # ═══════════════════════════════════════════════
 
+def parse_crypto_hdkey(ur_string: str) -> dict:
+    """Parse crypto-hdkey UR from Keystone → public key + path + xfp.
+
+    Returns dict with:
+      pubkey: bytes (32 bytes Ed25519)
+      path: str or None ("m/44'/607'/0'")
+      xfp: str or None ("73C5DA0A")
+      name: str or None
+    """
+    lower = ur_string.lower()
+    prefix = "ur:crypto-hdkey/"
+    if not lower.startswith(prefix):
+        raise ValueError(f"Expected ur:crypto-hdkey, got: {ur_string[:30]}")
+    body = ur_string[len(prefix):]
+    cbor_data = bytewords_decode(body)
+
+    decoder = CBORDecoder(cbor_data)
+    m = decoder.read_top_level_map()
+
+    # Key 3: public key (32 bytes, required)
+    pubkey = m.get(3)
+    if not isinstance(pubkey, bytes) or len(pubkey) != 32:
+        raise ValueError(f"Missing or invalid public key (CBOR key 3)")
+
+    # Key 6: origin (keypath + XFP)
+    path = None
+    xfp = None
+    origin = m.get(6)
+    if isinstance(origin, dict):
+        # Key 6.1: derivation path components array
+        components = origin.get(1)
+        if isinstance(components, list):
+            parts = ["m"]
+            i = 0
+            while i + 1 < len(components):
+                index = components[i]
+                hardened = components[i + 1]
+                if isinstance(index, int):
+                    parts.append(f"{index}'" if hardened else str(index))
+                i += 2
+            path = "/".join(parts)
+        # Key 6.2: XFP (uint32)
+        fp = origin.get(2)
+        if isinstance(fp, int):
+            xfp = f"{fp:08X}"
+
+    # Key 9: account name
+    name = m.get(9)
+
+    return {
+        "pubkey": pubkey,
+        "path": path,
+        "xfp": xfp,
+        "name": name if isinstance(name, str) else None,
+    }
+
+
 def encode_ton_sign_request(
     sign_data: bytes,
     address: str,

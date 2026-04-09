@@ -43,6 +43,40 @@ def apply_tweak(pubkey: bytes, tweak: bytes) -> bytes:
     return tweaked
 
 
+def generate_app_secret() -> bytes:
+    """Generate 12 random bytes for exton_app_secret."""
+    import os
+    return os.urandom(12)
+
+
+def derive_seed(app_secret: bytes) -> bytes:
+    """SHA-256(app_secret || salt) → 32-byte seed."""
+    return hashlib.sha256(app_secret + MULTISIG_SALT).digest()
+
+
+def seed_to_keypair(seed: bytes) -> tuple:
+    """Seed → (private_key, public_key) directly, no SLIP-0010."""
+    signing_key = nacl.signing.SigningKey(seed)
+    return bytes(signing_key._signing_key[:32]), bytes(signing_key.verify_key)
+
+
+def encode_recovery_code(app_secret: bytes, tweak: bytes, pro_pubkey: bytes) -> str:
+    """Encode Recovery Code: app_secret(12) + tweak(8) + pro_pubkey(32) → Base58."""
+    if len(app_secret) != 12:
+        raise ValueError(f"app_secret must be 12 bytes, got {len(app_secret)}")
+    if len(tweak) != 8:
+        raise ValueError(f"tweak must be 8 bytes, got {len(tweak)}")
+    if len(pro_pubkey) != 32:
+        raise ValueError(f"pro_pubkey must be 32 bytes, got {len(pro_pubkey)}")
+    combined = app_secret + tweak + pro_pubkey
+    return base58.b58encode(combined).decode()
+
+
+def format_recovery_code(code: str) -> str:
+    """Format for display: 7-char groups separated by dashes."""
+    return "-".join(code[i:i + 7] for i in range(0, len(code), 7))
+
+
 def decode_recovery_code(code: str) -> tuple:
     """Decode Recovery Code → (app_secret, tweak, pro_pubkey) as bytes."""
     cleaned = code.replace("-", "").replace(" ", "").strip()
