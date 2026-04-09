@@ -76,51 +76,29 @@ def cmd_create_wallet(args):
     app_seed = derive_seed(app_secret)   # SHA-256(secret || salt)
     app_privkey, app_pubkey = seed_to_keypair(app_seed)
 
-    # Step 3: Compute address via server (tweak=0 for instant result)
-    import urllib.request, urllib.error
+    # Step 3: Compute address locally (tweak=0, no server needed)
     tweak_hex = "0000000000000000"
+    tweak_bytes = bytes.fromhex(tweak_hex)
+    tweaked_app_pubkey = apply_tweak(app_pubkey, tweak_bytes)
+
     try:
-        req_data = json.dumps({
-            "exton_app_pubkey": app_pubkey.hex(),
-            "exton_pro_pubkey": pro_pubkey.hex(),
-            "tweak": tweak_hex,
-        }).encode()
-        req = urllib.request.Request(
-            "https://multisig.exton.app/api/compute-address",
-            data=req_data,
-            method="POST",
-            headers={"Content-Type": "application/json"},
-        )
-        resp = urllib.request.urlopen(req, timeout=15)
-        result = json.loads(resp.read())
-        wallet_address = result.get("contractAddress") or result.get("contract_address", "")
-    except Exception as e:
-        # Fallback: compute locally
-        tweak_bytes = bytes.fromhex(tweak_hex)
-        tweaked_app_pubkey = apply_tweak(app_pubkey, tweak_bytes)
-
-        try:
-            code_cell = from_base64(_find_code_file("exton_multisig.code"))
-        except FileNotFoundError:
-            print(json.dumps({"error": "exton_multisig.code not found"}))
-            return
-
-        data_cell = (begin_cell()
-            .store_bytes(tweaked_app_pubkey)
-            .store_bytes(pro_pubkey)
-            .store_uint(0, 32).store_uint(1, 32).store_uint(0, 1)
-            .end_cell())
-        state_init = (begin_cell()
-            .store_uint(0, 1).store_uint(0, 1)
-            .store_uint(1, 1).store_ref(code_cell)
-            .store_uint(1, 1).store_ref(data_cell)
-            .store_uint(0, 1)
-            .end_cell())
-        wallet_address = encode_address(0, state_init.hash, bounceable=False)
-
-    if not wallet_address:
-        print(json.dumps({"error": "Failed to compute wallet address"}))
+        code_cell = from_base64(_find_code_file("exton_multisig.code"))
+    except FileNotFoundError as e:
+        print(json.dumps({"error": str(e)}))
         return
+
+    data_cell = (begin_cell()
+        .store_bytes(tweaked_app_pubkey)
+        .store_bytes(pro_pubkey)
+        .store_uint(0, 32).store_uint(1, 32).store_uint(0, 1)
+        .end_cell())
+    state_init = (begin_cell()
+        .store_uint(0, 1).store_uint(0, 1)
+        .store_uint(1, 1).store_ref(code_cell)
+        .store_uint(1, 1).store_ref(data_cell)
+        .store_uint(0, 1)
+        .end_cell())
+    wallet_address = encode_address(0, state_init.hash, bounceable=False)
 
     # Step 4: Create Recovery Code
     tweak_bytes = bytes.fromhex(tweak_hex)

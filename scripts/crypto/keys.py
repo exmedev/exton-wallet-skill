@@ -24,23 +24,20 @@ def apply_tweak(pubkey: bytes, tweak: bytes) -> bytes:
     """Apply vanity tweak to Ed25519 pubkey: P' = P + tweak_scalar * G.
 
     tweak is 8 bytes (u64 big-endian), converted to Ed25519 scalar (32 bytes LE).
-    Uses libsodium's Ed25519 point arithmetic via PyNaCl bindings.
+    If tweak is zero, returns pubkey unchanged (no point addition needed).
     """
+    tweak_int = int.from_bytes(tweak, "big")
+    if tweak_int == 0:
+        return pubkey  # No tweak — pubkey unchanged
+
     from nacl.bindings import (
         crypto_scalarmult_ed25519_base_noclamp,
         crypto_core_ed25519_add,
     )
 
-    # Convert tweak (8 bytes BE) to u64, then to 32-byte LE scalar
-    tweak_int = int.from_bytes(tweak, "big")
     tweak_scalar = tweak_int.to_bytes(32, "little")
-
-    # tweak_point = tweak_scalar * G (base point multiplication)
     tweak_point = crypto_scalarmult_ed25519_base_noclamp(tweak_scalar)
-
-    # result = pubkey + tweak_point (point addition)
-    tweaked = crypto_core_ed25519_add(pubkey, tweak_point)
-    return tweaked
+    return crypto_core_ed25519_add(pubkey, tweak_point)
 
 
 def generate_app_secret() -> bytes:
