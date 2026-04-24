@@ -1,6 +1,6 @@
 """
 Encrypted key storage — AES-256-GCM.
-Stores exton_app_privkey encrypted with user password.
+Stores exme_app_privkey encrypted with user password.
 """
 
 import hashlib
@@ -8,19 +8,19 @@ import json
 import os
 from pathlib import Path
 
-EXTON_DIR = Path.home() / ".exton"
-CONFIG_FILE = EXTON_DIR / "config.json"
-KEY_FILE = EXTON_DIR / "app_key.enc"
+EXME_DIR = Path.home() / ".exme"
+CONFIG_FILE = EXME_DIR / "config.json"
+KEY_FILE = EXME_DIR / "app_key.enc"
 
 
 def _derive_aes_key(password: str, salt: bytes) -> bytes:
-    """PBKDF2-SHA256, 100K iterations → 32 bytes AES key."""
+    """PBKDF2-SHA256, 100K iterations -> 32 bytes AES key."""
     return hashlib.pbkdf2_hmac("sha256", password.encode(), salt, 100_000, dklen=32)
 
 
 def save_encrypted_key(private_key: bytes, password: str):
     """Encrypt and save private key."""
-    EXTON_DIR.mkdir(parents=True, exist_ok=True)
+    EXME_DIR.mkdir(parents=True, exist_ok=True)
     salt = os.urandom(16)
     aes_key = _derive_aes_key(password, salt)
 
@@ -63,7 +63,7 @@ def load_encrypted_key(password: str) -> bytes:
 
 def save_config(config: dict):
     """Save wallet config (public info only)."""
-    EXTON_DIR.mkdir(parents=True, exist_ok=True)
+    EXME_DIR.mkdir(parents=True, exist_ok=True)
     CONFIG_FILE.write_text(json.dumps(config, indent=2))
 
 

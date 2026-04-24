@@ -1,11 +1,11 @@
 #!/bin/bash
-# Exton Wallet Skill — install dependencies
+# EXME Wallet Skill — install dependencies
 # Idempotent: safe to run multiple times
 set -e
 
 SKILL_DIR="$(cd "$(dirname "$0")/.." && pwd)"
 
-echo "Installing Exton Wallet Skill..."
+echo "Installing EXME Wallet Skill..."
 
 # Check Python3
 if ! command -v python3 &>/dev/null; then
@@ -47,7 +47,7 @@ except:
 
 # Setup system crontab for transaction monitoring (every 2 minutes)
 WATCH_SCRIPT="$SKILL_DIR/scripts/watch_cron.sh"
-CRON_TAG="# exton-wallet-watch"
+CRON_TAG="# exme-wallet-watch"
 
 # Remove old entry if exists, add fresh
 (crontab -l 2>/dev/null | grep -v "$CRON_TAG") | { cat; echo "* * * * * bash $WATCH_SCRIPT $CRON_TAG"; } | crontab -
@@ -59,5 +59,5 @@ if command -v openclaw &>/dev/null; then
 fi
 
 echo ""
-echo "Exton Wallet Skill installed!"
-echo "Start a new session (/new) and say: Connect my Exton wallet"
+echo "EXME Wallet Skill installed!"
+echo "Start a new session (/new) and say: Connect my EXME wallet"

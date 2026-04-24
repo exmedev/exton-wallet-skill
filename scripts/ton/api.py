@@ -1,8 +1,8 @@
 """
-TON API wrapper — all requests go through Exton proxy at api.exton.app.
+TON API wrapper — all requests go through EXME proxy at api.exme.org.
 
 User's TONAPI_KEY is NEVER stored on their device.
-Exton proxy handles authentication to tonapi.io internally.
+EXME proxy handles authentication to tonapi.io internally.
 """
 
 import json
@@ -11,26 +11,26 @@ import urllib.parse
 import urllib.error
 
 # All TON API calls go through our proxy — user never needs an API key
-EXTON_API_BASE = "https://api.exton.app/ton"
+EXME_API_BASE = "https://api.exme.org/ton"
 
 
 _HEADERS = {
     "Accept": "application/json",
-    "User-Agent": "ExtonWalletSkill/1.0",
+    "User-Agent": "ExmeWalletSkill/1.0",
 }
 
 
 def _api_get(path: str) -> dict:
-    """GET request to Exton TON proxy."""
-    url = f"{EXTON_API_BASE}{path}"
+    """GET request to EXME TON proxy."""
+    url = f"{EXME_API_BASE}{path}"
     req = urllib.request.Request(url, headers=_HEADERS)
     with urllib.request.urlopen(req, timeout=15) as resp:
         return json.loads(resp.read())
 
 
 def _api_post(path: str, body: dict) -> dict:
-    """POST request to Exton TON proxy."""
-    url = f"{EXTON_API_BASE}{path}"
+    """POST request to EXME TON proxy."""
+    url = f"{EXME_API_BASE}{path}"
     data = json.dumps(body).encode()
     req = urllib.request.Request(url, data=data, method="POST", headers={
         **_HEADERS, "Content-Type": "application/json"
@@ -96,7 +96,7 @@ def broadcast(boc_base64: str) -> dict:
 
 
 def resolve_domain(domain: str) -> str:
-    """Resolve .ton domain → friendly address."""
+    """Resolve .ton domain -> friendly address."""
     encoded = urllib.parse.quote(domain, safe="")
     data = _api_get(f"/v2/dns/{encoded}/resolve")
     wallet = data.get("wallet", {})

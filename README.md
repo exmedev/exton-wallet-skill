@@ -1,19 +1,19 @@
-# Exton Wallet — OpenClaw Skill
+# EXME Wallet — OpenClaw Skill
 
-Manage your [Exton](https://exton.app) TON crypto wallet through an AI agent. Sign transactions with Keystone 3 Pro hardware wallet — your private key never leaves the device.
+Manage your [EXME](https://exme.org) TON crypto wallet through an AI agent. Sign transactions with Keystone 3 Pro hardware wallet — your private key never leaves the device.
 
 ## Quick Start
 
 ```bash
-git clone https://github.com/exmedev/exton-wallet-skill.git \
-  ~/.openclaw/skills/exton-wallet
+git clone https://github.com/exmedev/exme-wallet-skill.git \
+  ~/.openclaw/skills/exme-wallet
 
-bash ~/.openclaw/skills/exton-wallet/scripts/install.sh
+bash ~/.openclaw/skills/exme-wallet/scripts/install.sh
 ```
 
-Start a new session (`/new`) and say: **"Connect my Exton wallet"**
+Start a new session (`/new`) and say: **"Connect my EXME wallet"**
 
-The agent will ask for your Recovery Code (from Exton Android app: Settings > MultiSig > Recovery Code). That's it.
+The agent will ask for your Recovery Code (from EXME Android app: Settings > Cortex > Recovery Code). That's it.
 
 ## Features
 
@@ -46,14 +46,14 @@ Incoming and outgoing transactions are monitored every minute after install. Not
 ## Updating
 
 ```bash
-bash ~/.openclaw/skills/exton-wallet/scripts/update.sh
+bash ~/.openclaw/skills/exme-wallet/scripts/update.sh
 ```
 
 ## Security
 
 - Private key stays in Keystone Secure Element
 - Recovery Code encrypted with AES-256-GCM on disk
-- All API calls through Exton proxy (no user API keys needed)
+- All API calls through EXME proxy (no user API keys needed)
 - Keystone shows transaction details on its own screen
 
 ## Requirements
@@ -61,7 +61,7 @@ bash ~/.openclaw/skills/exton-wallet/scripts/update.sh
 - Python 3.9+
 - [OpenClaw](https://github.com/openclaw/openclaw) with Telegram channel
 - [Keystone 3 Pro](https://keyst.one) hardware wallet
-- [Exton Wallet](https://download.exton.app) Android app
+- [EXME Wallet](https://download.exme.org) Android app
 
 ## Architecture
 

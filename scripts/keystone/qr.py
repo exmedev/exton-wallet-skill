@@ -6,7 +6,7 @@ import io
 import os
 from pathlib import Path
 
-PENDING_DIR = Path.home() / ".exton" / "pending"
+PENDING_DIR = Path.home() / ".exme" / "pending"
 
 
 def generate_qr(ur_string: str, output_path: str = None) -> str:
@@ -33,7 +33,7 @@ def generate_qr(ur_string: str, output_path: str = None) -> str:
 
 
 def decode_qr_from_image(image_path: str) -> str:
-    """Decode QR code from photo/screenshot → UR string."""
+    """Decode QR code from photo/screenshot -> UR string."""
     from pyzbar import pyzbar
     from PIL import Image
 

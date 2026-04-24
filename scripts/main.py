@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Exton Wallet CLI — entry point for OpenClaw skill.
+EXME Wallet CLI — entry point for OpenClaw skill.
 
 Usage:
   python3 main.py setup --recovery-code "..."
@@ -29,7 +29,7 @@ def _find_code_file(filename):
     paths = [
         os.path.join(skill_dir, "resources", filename),
         os.path.join(skill_dir, "resources", "wallet", filename),
-        os.path.expanduser(f"~/.exton/{filename}"),
+        os.path.expanduser(f"~/.exme/{filename}"),
     ]
     for p in paths:
         if os.path.exists(p):
@@ -38,12 +38,12 @@ def _find_code_file(filename):
 
 
 def cmd_create_wallet(args):
-    """Create new Exton MultiSig wallet from Keystone QR photo."""
+    """Create new EXME Cortex wallet from Keystone QR photo."""
     from crypto.keys import (
         generate_app_secret, derive_seed, seed_to_keypair,
         apply_tweak, encode_recovery_code, format_recovery_code,
     )
-    from crypto.storage import save_encrypted_key, save_config, EXTON_DIR
+    from crypto.storage import save_encrypted_key, save_config, EXME_DIR
     from ton.address import encode_address
     from ton.cell import begin_cell
     from ton.boc import from_base64
@@ -67,7 +67,7 @@ def cmd_create_wallet(args):
         print(json.dumps({"error": f"Failed to parse Keystone QR: {e}"}))
         return
 
-    pro_pubkey = account["pubkey"]
+    device_pubkey = account["pubkey"]
     cosigner_path = account.get("path") or "m/44'/607'/0'"
     cosigner_xfp = account.get("xfp")
 
@@ -82,14 +82,14 @@ def cmd_create_wallet(args):
     tweaked_app_pubkey = apply_tweak(app_pubkey, tweak_bytes)
 
     try:
-        code_cell = from_base64(_find_code_file("exton_multisig.code"))
+        code_cell = from_base64(_find_code_file("exme_cortex.code"))
     except FileNotFoundError as e:
         print(json.dumps({"error": str(e)}))
         return
 
     data_cell = (begin_cell()
         .store_bytes(tweaked_app_pubkey)
-        .store_bytes(pro_pubkey)
+        .store_bytes(device_pubkey)
         .store_uint(0, 32).store_uint(1, 32).store_uint(0, 1)
         .end_cell())
     state_init = (begin_cell()
@@ -102,11 +102,11 @@ def cmd_create_wallet(args):
 
     # Step 4: Create Recovery Code
     tweak_bytes = bytes.fromhex(tweak_hex)
-    recovery_code = encode_recovery_code(app_secret, tweak_bytes, pro_pubkey)
+    recovery_code = encode_recovery_code(app_secret, tweak_bytes, device_pubkey)
     recovery_formatted = format_recovery_code(recovery_code)
 
     # Step 5: Save wallet config + encrypted key
-    password = args.get("password", "exton")
+    password = args.get("password", "exme")
     save_encrypted_key(app_privkey, password)
 
     tweaked_app_pubkey = apply_tweak(app_pubkey, tweak_bytes)
@@ -115,7 +115,7 @@ def cmd_create_wallet(args):
         "wallet_address": wallet_address,
         "app_pubkey": app_pubkey.hex(),
         "tweaked_app_pubkey": tweaked_app_pubkey.hex(),
-        "pro_pubkey": pro_pubkey.hex(),
+        "device_pubkey": device_pubkey.hex(),
         "tweak": tweak_hex,
         "cosigner_path": cosigner_path,
         "cosigner_xfp": cosigner_xfp,
@@ -127,11 +127,11 @@ def cmd_create_wallet(args):
         "wallet_address": wallet_address,
         "recovery_code": recovery_formatted,
         "message": (
-            f"Кошелёк создан!\n\n"
-            f"Адрес: {wallet_address}\n\n"
-            f"Recovery Code (СОХРАНИТЕ!):\n{recovery_formatted}\n\n"
-            f"Этот код — единственный способ восстановить кошелёк. "
-            f"Запишите его и храните в надёжном месте."
+            f"Wallet created!\n\n"
+            f"Address: {wallet_address}\n\n"
+            f"Recovery Code (SAVE IT!):\n{recovery_formatted}\n\n"
+            f"This code is the only way to recover your wallet. "
+            f"Write it down and store in a safe place."
         ),
     }))
 
@@ -139,7 +139,7 @@ def cmd_create_wallet(args):
 def cmd_setup(args):
     """Setup wallet from Recovery Code + TONAPI_KEY."""
     from crypto.keys import recovery_code_to_keys
-    from crypto.storage import save_encrypted_key, save_config, EXTON_DIR
+    from crypto.storage import save_encrypted_key, save_config, EXME_DIR
     from ton.address import encode_address
     from ton.cell import begin_cell
     from ton.boc import from_base64
@@ -149,25 +149,25 @@ def cmd_setup(args):
         print(json.dumps({"error": "--recovery-code required (71 chars Base58)"}))
         return
 
-    # TONAPI_KEY managed by Exton infrastructure — user doesn't need to provide it
+    # TONAPI_KEY managed by EXME infrastructure — user doesn't need to provide it
 
     # Derive keys
     keys = recovery_code_to_keys(code)
 
     # Encrypt and store private key
-    password = args.get("password", "exton")
+    password = args.get("password", "exme")
     save_encrypted_key(keys["app_privkey"], password)
 
     # Compute wallet address from StateInit
     try:
-        code_cell = from_base64(_find_code_file("exton_multisig.code"))
+        code_cell = from_base64(_find_code_file("exme_cortex.code"))
     except FileNotFoundError as e:
         print(json.dumps({"error": str(e)}))
         return
 
     data_cell = (begin_cell()
         .store_bytes(keys["tweaked_app_pubkey"])
-        .store_bytes(keys["pro_pubkey"])
+        .store_bytes(keys["device_pubkey"])
         .store_uint(0, 32).store_uint(1, 32).store_uint(0, 1)
         .end_cell())
     state_init = (begin_cell()
@@ -185,7 +185,7 @@ def cmd_setup(args):
         "wallet_address": wallet_address,
         "app_pubkey": keys["app_pubkey"].hex(),
         "tweaked_app_pubkey": keys["tweaked_app_pubkey"].hex(),
-        "pro_pubkey": keys["pro_pubkey"].hex(),
+        "device_pubkey": keys["device_pubkey"].hex(),
         "tweak": keys["tweak"].hex(),
         "telegram_chat_id": telegram_chat_id,
     }
@@ -203,7 +203,7 @@ def cmd_setup(args):
         "wallet_address": wallet_address,
         "balance_ton": balance.get("balance_ton", "?"),
         "wallet_status": balance.get("status", "unknown"),
-        "config_dir": str(EXTON_DIR),
+        "config_dir": str(EXME_DIR),
     }))
 
 
@@ -216,7 +216,7 @@ def cmd_balance(args):
     address = config.get("wallet_address", "")
     if not address:
         # Use env variable as fallback
-        address = os.environ.get("EXTON_WALLET_ADDRESS", "")
+        address = os.environ.get("EXME_WALLET_ADDRESS", "")
     if not address:
         print(json.dumps({"error": "Wallet address not configured"}))
         return
@@ -231,7 +231,7 @@ def cmd_history(args):
     from ton.api import get_transactions
 
     config = load_config()
-    address = config.get("wallet_address", os.environ.get("EXTON_WALLET_ADDRESS", ""))
+    address = config.get("wallet_address", os.environ.get("EXME_WALLET_ADDRESS", ""))
     limit = int(args.get("limit", 20))
 
     result = get_transactions(address, limit)
@@ -257,7 +257,7 @@ def cmd_jettons(args):
     from ton.api import get_jettons
 
     config = load_config()
-    address = config.get("wallet_address", os.environ.get("EXTON_WALLET_ADDRESS", ""))
+    address = config.get("wallet_address", os.environ.get("EXME_WALLET_ADDRESS", ""))
 
     result = get_jettons(address)
     print(json.dumps(result, indent=2))
@@ -269,7 +269,7 @@ def cmd_seqno(args):
     from ton.api import get_seqno
 
     config = load_config()
-    address = config.get("wallet_address", os.environ.get("EXTON_WALLET_ADDRESS", ""))
+    address = config.get("wallet_address", os.environ.get("EXME_WALLET_ADDRESS", ""))
 
     seqno = get_seqno(address)
     print(json.dumps({"seqno": seqno}))
@@ -313,7 +313,7 @@ def cmd_plugins(args):
 def cmd_send(args):
     """Build unsigned TX, sign app_key, generate QR for Keystone."""
     import base64 as b64lib
-    from crypto.storage import load_config, load_encrypted_key, EXTON_DIR
+    from crypto.storage import load_config, load_encrypted_key, EXME_DIR
     from ton.api import get_seqno, get_balance, resolve_domain
     from ton.address import parse_friendly_address, parse_raw_address
     from ton.wallet import build_send_payload, sign_payload
@@ -324,7 +324,7 @@ def cmd_send(args):
     from pathlib import Path
 
     config = load_config()
-    wallet_address = config.get("wallet_address", os.environ.get("EXTON_WALLET_ADDRESS", ""))
+    wallet_address = config.get("wallet_address", os.environ.get("EXME_WALLET_ADDRESS", ""))
     to_raw = args.get("to", "")
     amount_nano = int(args.get("amount", 0))
     comment = args.get("comment", None)
@@ -365,11 +365,11 @@ def cmd_send(args):
 
     # Load keys and sign
     tweak_hex = config.get("tweak", "")
-    app_privkey = load_encrypted_key(os.environ.get("EXTON_KEY_PASSWORD", "exton"))
+    app_privkey = load_encrypted_key(os.environ.get("EXME_KEY_PASSWORD", "exme"))
     app_sig = sign_payload(payload, app_privkey, tweak_hex if tweak_hex else None)
 
     # Save pending data for sign-submit
-    pending_dir = EXTON_DIR / "pending"
+    pending_dir = EXME_DIR / "pending"
     pending_dir.mkdir(parents=True, exist_ok=True)
 
     pending_data = {
@@ -384,10 +384,10 @@ def cmd_send(args):
     (pending_dir / "pending_tx.json").write_text(json.dumps(pending_data))
 
     # Generate Keystone QR
-    # Keystone needs V4R2 address of Exton Pro key (not MultiSig address)
+    # Keystone needs V4R2 address of EXME Device key (not Cortex address)
     from ton.wallet import compute_v4r2_address
-    pro_pubkey = bytes.fromhex(config.get("pro_pubkey", ""))
-    keystone_address = compute_v4r2_address(pro_pubkey) if pro_pubkey else wallet_address
+    device_pubkey = bytes.fromhex(config.get("device_pubkey", config.get("pro_pubkey", "")))
+    keystone_address = compute_v4r2_address(device_pubkey) if device_pubkey else wallet_address
     cosigner_path = config.get("cosigner_path", "m/44'/607'/0'")
     cosigner_xfp = config.get("cosigner_xfp")
 
@@ -400,7 +400,7 @@ def cmd_send(args):
     )
     qr_path = generate_qr(ur)
 
-    # Upload QR to Exton CDN and send via OpenClaw
+    # Upload QR to EXME CDN and send via OpenClaw
     import subprocess, shutil
     import uuid as _uuid
     qr_filename = f"{_uuid.uuid4().hex[:12]}.png"
@@ -411,14 +411,14 @@ def cmd_send(args):
         with open(qr_path, "rb") as f:
             qr_bytes = f.read()
         req = urllib.request.Request(
-            f"https://api.exton.app/qr/upload/{qr_filename}",
+            f"https://api.exme.org/qr/upload/{qr_filename}",
             data=qr_bytes,
             method="PUT",
             headers={"Content-Type": "image/png"},
         )
         resp = urllib.request.urlopen(req, timeout=10)
         if resp.status == 200:
-            qr_url = f"https://download.exton.app/qr/{qr_filename}"
+            qr_url = f"https://download.exme.org/qr/{qr_filename}"
     except Exception:
         pass
 
@@ -432,7 +432,7 @@ def cmd_send(args):
                  "--target", chat_id,
                  "--media", qr_url,
                  "--message", f"📱 {amount_nano / 1e9} TON → {to_raw[:20]}...\n"
-                              f"Отсканируйте QR на Keystone → подтвердите → пришлите фото подписи"],
+                              f"Scan the QR on Keystone → confirm → send photo of signature"],
                 timeout=15, capture_output=True
             )
         except Exception:
@@ -451,14 +451,14 @@ def cmd_sign_submit(args):
     """Decode Keystone signature from photo/UR, assemble signed BOC, broadcast, confirm."""
     import base64 as b64lib
     import time as _time
-    from crypto.storage import load_config, EXTON_DIR
+    from crypto.storage import load_config, EXME_DIR
     from ton.boc import deserialize, to_base64, from_base64
     from ton.cell import begin_cell
     from ton.wallet import assemble_external_message
     from ton.api import broadcast, get_seqno
 
     # Load pending TX
-    pending_file = EXTON_DIR / "pending" / "pending_tx.json"
+    pending_file = EXME_DIR / "pending" / "pending_tx.json"
     if not pending_file.exists():
         print(json.dumps({"error": "No pending transaction. Run 'send' first."}))
         return
@@ -472,7 +472,7 @@ def cmd_sign_submit(args):
     wallet_address = pending.get("wallet_address", "")
     old_seqno = pending.get("seqno", 0)
 
-    # Get pro signature
+    # Get device signature
     photo_path = args.get("photo", "")
     ur_string = args.get("ur", "")
 
@@ -485,19 +485,19 @@ def cmd_sign_submit(args):
         return
 
     from keystone.ur import decode_ton_signature
-    _, pro_sig = decode_ton_signature(ur_string)
+    _, device_sig = decode_ton_signature(ur_string)
 
     # Build StateInit if first TX (wallet not yet deployed)
     state_init = None
     if needs_state_init:
         config = load_config()
-        code_cell = from_base64(_find_code_file("exton_multisig.code"))
+        code_cell = from_base64(_find_code_file("exme_cortex.code"))
         tweaked_pub = bytes.fromhex(config.get("tweaked_app_pubkey", ""))
-        pro_pub = bytes.fromhex(config.get("pro_pubkey", ""))
+        device_pub = bytes.fromhex(config.get("device_pubkey", config.get("pro_pubkey", "")))
 
         data_cell = (begin_cell()
             .store_bytes(tweaked_pub)
-            .store_bytes(pro_pub)
+            .store_bytes(device_pub)
             .store_uint(0, 32).store_uint(1, 32).store_uint(0, 1)
             .end_cell())
 
@@ -511,7 +511,7 @@ def cmd_sign_submit(args):
     # Assemble and broadcast
     ext_msg = assemble_external_message(
         app_sig=app_sig,
-        pro_sig=pro_sig,
+        pro_sig=device_sig,
         payload=payload,
         wallet_workchain=wallet_wc,
         wallet_hash=wallet_hash,
@@ -541,14 +541,14 @@ def cmd_sign_submit(args):
         balance = get_balance(wallet_address)
         print(json.dumps({
             "status": "confirmed",
-            "message": f"✅ Транзакция подтверждена!",
+            "message": f"Transaction confirmed!",
             "new_seqno": new_seqno,
             "balance_ton": balance.get("balance_ton", "?"),
         }))
     else:
         print(json.dumps({
             "status": "broadcast",
-            "message": "Транзакция отправлена, ожидает подтверждения",
+            "message": "Transaction sent, awaiting confirmation",
             "result": result,
         }))
 
@@ -560,7 +560,7 @@ def cmd_check_tx(args):
     from ton.address import parse_friendly_address
 
     config = load_config()
-    address = config.get("wallet_address", os.environ.get("EXTON_WALLET_ADDRESS", ""))
+    address = config.get("wallet_address", os.environ.get("EXME_WALLET_ADDRESS", ""))
     limit = int(args.get("limit", 5))
 
     # Raw hash for comparison
@@ -600,12 +600,12 @@ def cmd_check_tx(args):
 
 def cmd_watch(args):
     """Check for new transactions since last check. Used by cron for notifications."""
-    from crypto.storage import load_config, EXTON_DIR
+    from crypto.storage import load_config, EXME_DIR
     from ton.api import get_transactions, get_balance
     from ton.address import parse_friendly_address, to_non_bounceable, encode_address
 
     config = load_config()
-    address = config.get("wallet_address", os.environ.get("EXTON_WALLET_ADDRESS", ""))
+    address = config.get("wallet_address", os.environ.get("EXME_WALLET_ADDRESS", ""))
     if not address:
         print(json.dumps({"error": "Wallet not configured"}))
         return
@@ -615,7 +615,7 @@ def cmd_watch(args):
     my_raw_suffix = my_hash.hex()  # 64-char hex hash
 
     # Load last seen timestamp
-    state_file = EXTON_DIR / "watch_state.json"
+    state_file = EXME_DIR / "watch_state.json"
     last_seen = 0
     if state_file.exists():
         try:
@@ -670,7 +670,7 @@ def cmd_watch(args):
 
     # Save state
     if max_ts > last_seen:
-        EXTON_DIR.mkdir(parents=True, exist_ok=True)
+        EXME_DIR.mkdir(parents=True, exist_ok=True)
         state_file.write_text(json.dumps({"last_seen": max_ts}))
 
     result = {

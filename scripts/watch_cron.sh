@@ -1,11 +1,11 @@
 #!/bin/bash
-# Exton Wallet — cron watchdog for incoming transactions
+# EXME Wallet — cron watchdog for incoming transactions
 # Runs every 2 minutes via system crontab
-# If new transactions found → sends notification via OpenClaw
+# If new transactions found -> sends notification via OpenClaw
 
 SKILL_DIR="$(cd "$(dirname "$0")/.." && pwd)"
-EXTON_DIR="$HOME/.exton"
-CONFIG="$EXTON_DIR/config.json"
+EXME_DIR="$HOME/.exme"
+CONFIG="$EXME_DIR/config.json"
 
 # Skip if not configured
 [ -f "$CONFIG" ] || exit 0

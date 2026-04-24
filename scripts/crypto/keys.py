@@ -1,11 +1,11 @@
 """
 Key derivation from Recovery Code — exact port from Kotlin.
 
-Recovery Code (52 bytes → Base58 ≈ 71 chars):
-  exton_app_secret(12) + tweak(8) + exton_pro_pubkey(32)
+Recovery Code (52 bytes -> Base58 ~ 71 chars):
+  exme_app_secret(12) + tweak(8) + exme_device_pubkey(32)
 
 Seed derivation:
-  SHA-256(exton_app_secret || "exton-multisig-v1") → 32 bytes → SLIP-0010 → keypair
+  SHA-256(exme_app_secret || "exme-cortex-v1") -> 32 bytes -> SLIP-0010 -> keypair
 """
 
 import hashlib
@@ -15,7 +15,7 @@ import struct
 import base58
 import nacl.signing
 
-MULTISIG_SALT = b"exton-multisig-v1"
+CORTEX_SALT = b"exme-cortex-v1"
 TON_PATH = [44, 607, 0]  # m/44'/607'/0' (all hardened)
 HARDENED = 0x80000000
 
@@ -41,31 +41,32 @@ def apply_tweak(pubkey: bytes, tweak: bytes) -> bytes:
 
 
 def generate_app_secret() -> bytes:
-    """Generate 12 random bytes for exton_app_secret."""
+    """Generate 12 random bytes for exme_app_secret."""
     import os
     return os.urandom(12)
 
 
 def derive_seed(app_secret: bytes) -> bytes:
-    """SHA-256(app_secret || salt) → 32-byte seed."""
-    return hashlib.sha256(app_secret + MULTISIG_SALT).digest()
+    """SHA-256(app_secret || CORTEX_SALT) -> 32-byte seed."""
+    return hashlib.sha256(app_secret + CORTEX_SALT).digest()
+
 
 
 def seed_to_keypair(seed: bytes) -> tuple:
-    """Seed → (private_key, public_key) directly, no SLIP-0010."""
+    """Seed -> (private_key, public_key) directly, no SLIP-0010."""
     signing_key = nacl.signing.SigningKey(seed)
     return bytes(signing_key._signing_key[:32]), bytes(signing_key.verify_key)
 
 
-def encode_recovery_code(app_secret: bytes, tweak: bytes, pro_pubkey: bytes) -> str:
-    """Encode Recovery Code: app_secret(12) + tweak(8) + pro_pubkey(32) → Base58."""
+def encode_recovery_code(app_secret: bytes, tweak: bytes, device_pubkey: bytes) -> str:
+    """Encode Recovery Code: app_secret(12) + tweak(8) + device_pubkey(32) -> Base58."""
     if len(app_secret) != 12:
         raise ValueError(f"app_secret must be 12 bytes, got {len(app_secret)}")
     if len(tweak) != 8:
         raise ValueError(f"tweak must be 8 bytes, got {len(tweak)}")
-    if len(pro_pubkey) != 32:
-        raise ValueError(f"pro_pubkey must be 32 bytes, got {len(pro_pubkey)}")
-    combined = app_secret + tweak + pro_pubkey
+    if len(device_pubkey) != 32:
+        raise ValueError(f"device_pubkey must be 32 bytes, got {len(device_pubkey)}")
+    combined = app_secret + tweak + device_pubkey
     return base58.b58encode(combined).decode()
 
 
@@ -75,15 +76,15 @@ def format_recovery_code(code: str) -> str:
 
 
 def decode_recovery_code(code: str) -> tuple:
-    """Decode Recovery Code → (app_secret, tweak, pro_pubkey) as bytes."""
+    """Decode Recovery Code -> (app_secret, tweak, device_pubkey) as bytes."""
     cleaned = code.replace("-", "").replace(" ", "").strip()
     raw = base58.b58decode(cleaned)
     if len(raw) != 52:
         raise ValueError(f"Recovery Code must be 52 bytes, got {len(raw)}")
     app_secret = raw[0:12]
     tweak = raw[12:20]
-    pro_pubkey = raw[20:52]
-    return app_secret, tweak, pro_pubkey
+    device_pubkey = raw[20:52]
+    return app_secret, tweak, device_pubkey
 
 
 def _slip0010_master(seed: bytes) -> tuple:
@@ -104,7 +105,7 @@ def _slip0010_child(parent_key: bytes, parent_chain: bytes, index: int) -> tuple
 
 
 def derive_keypair(seed: bytes, path: list = None) -> tuple:
-    """SLIP-0010 derivation: seed → (private_key, public_key) for given path."""
+    """SLIP-0010 derivation: seed -> (private_key, public_key) for given path."""
     if path is None:
         path = TON_PATH
     private_key, chain_code = _slip0010_master(seed)
@@ -117,34 +118,23 @@ def derive_keypair(seed: bytes, path: list = None) -> tuple:
 
 def recovery_code_to_keys(code: str) -> dict:
     """
-    Full derivation: Recovery Code → all keys + address info.
+    Full derivation: Recovery Code -> all keys + address info.
 
-    IMPORTANT: Exton MultiSig uses seed DIRECTLY as Ed25519 private key,
-    NOT via SLIP-0010 derivation. This matches Kotlin:
-      val appSeed = SHA-256(appSecret || salt)
-      val keyPair = Ed25519KeyPair(appSeed)  // seed → Bouncy Castle directly
-
-    Returns dict with:
-      app_secret, tweak, pro_pubkey,
-      app_privkey, app_pubkey (32 bytes each)
+    EXME Cortex uses seed DIRECTLY as Ed25519 private key,
+    NOT via SLIP-0010 derivation.
     """
-    app_secret, tweak, pro_pubkey = decode_recovery_code(code)
+    app_secret, tweak, device_pubkey = decode_recovery_code(code)
 
-    # Derive seed from app_secret + salt (this IS the private key for MultiSig)
-    app_privkey = hashlib.sha256(app_secret + MULTISIG_SALT).digest()
-
-    # Public key from seed directly (NOT SLIP-0010)
+    app_privkey = hashlib.sha256(app_secret + CORTEX_SALT).digest()
     signing_key = nacl.signing.SigningKey(app_privkey)
     app_pubkey = bytes(signing_key.verify_key)
-
-    # Apply tweak: tweaked_pubkey = app_pubkey + tweak * G
     tweaked_app_pubkey = apply_tweak(app_pubkey, tweak)
 
     return {
         "app_secret": app_secret,
         "tweak": tweak,
-        "pro_pubkey": pro_pubkey,
+        "device_pubkey": device_pubkey,
         "app_privkey": app_privkey,
-        "app_pubkey": app_pubkey,           # original (for signing)
-        "tweaked_app_pubkey": tweaked_app_pubkey,  # tweaked (for address)
+        "app_pubkey": app_pubkey,
+        "tweaked_app_pubkey": tweaked_app_pubkey,
     }

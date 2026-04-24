@@ -1,12 +1,12 @@
 #!/bin/bash
-# Exton Wallet Skill — update to latest version
+# EXME Wallet Skill — update to latest version
 # Handles ANY state: dirty working tree, untracked files, conflicts
 set -e
 
 SKILL_DIR="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$SKILL_DIR"
 
-echo "Updating Exton Wallet Skill..."
+echo "Updating EXME Wallet Skill..."
 
 # Reset local changes (skill code is managed by git, not user)
 git fetch origin main 2>/dev/null
@@ -28,4 +28,4 @@ if command -v openclaw &>/dev/null; then
     openclaw gateway restart 2>/dev/null || true
 fi
 
-echo "✅ Updated to: $(git log --oneline -1)"
+echo "Updated to: $(git log --oneline -1)"

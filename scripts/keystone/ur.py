@@ -8,9 +8,9 @@ import uuid
 import zlib
 
 
-# ═══════════════════════════════════════════════
+# ===============================================
 # CBOR Encoder (RFC 8949, minimal subset)
-# ═══════════════════════════════════════════════
+# ===============================================
 
 class CBOREncoder:
     def __init__(self):
@@ -61,9 +61,9 @@ class CBOREncoder:
         return bytes(self._buf)
 
 
-# ═══════════════════════════════════════════════
+# ===============================================
 # CBOR Decoder (minimal subset)
-# ═══════════════════════════════════════════════
+# ===============================================
 
 class CBORDecoder:
     def __init__(self, data: bytes):
@@ -149,9 +149,9 @@ class CBORDecoder:
         return self.read_item()
 
 
-# ═══════════════════════════════════════════════
+# ===============================================
 # Bytewords (BCR-2020-012, minimal style)
-# ═══════════════════════════════════════════════
+# ===============================================
 
 WORDS = [
     "able", "acid", "also", "apex", "aqua", "arch", "atom", "aunt",
@@ -224,12 +224,12 @@ def bytewords_decode(encoded: str) -> bytes:
     return payload
 
 
-# ═══════════════════════════════════════════════
-# ton-sign-request encoding (Exton → Keystone)
-# ═══════════════════════════════════════════════
+# ===============================================
+# ton-sign-request encoding (EXME -> Keystone)
+# ===============================================
 
 def parse_crypto_hdkey(ur_string: str) -> dict:
-    """Parse crypto-hdkey UR from Keystone → public key + path + xfp.
+    """Parse crypto-hdkey UR from Keystone -> public key + path + xfp.
 
     Returns dict with:
       pubkey: bytes (32 bytes Ed25519)
@@ -344,12 +344,12 @@ def encode_ton_sign_request(
     return f"ur:ton-sign-request/{body}"
 
 
-# ═══════════════════════════════════════════════
-# ton-signature decoding (Keystone → Exton)
-# ═══════════════════════════════════════════════
+# ===============================================
+# ton-signature decoding (Keystone -> EXME)
+# ===============================================
 
 def decode_ton_signature(ur_string: str) -> tuple:
-    """Decode a ton-signature UR string → (request_id_bytes, signature_64bytes)."""
+    """Decode a ton-signature UR string -> (request_id_bytes, signature_64bytes)."""
     lower = ur_string.lower()
     prefix = "ur:ton-signature/"
     if not lower.startswith(prefix):

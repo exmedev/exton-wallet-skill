@@ -1,7 +1,7 @@
 """
-Exton MultiSig transaction builder — exact port from Kotlin ExtonMultiSigContract.kt.
+EXME Cortex transaction builder — exact port from Kotlin ExmeCortexContract.kt.
 
-Builds unsigned payloads, signs with exton_app_key, assembles with both signatures.
+Builds unsigned payloads, signs with exme_app_key, assembles with both signatures.
 """
 
 import time
@@ -18,7 +18,7 @@ V4R2_CODE_BOC = "te6cckECFAEAAtQAART/APSkE/S88sgLAQIBIAIDAgFIBAUE+PKDCNcYINMf0x/
 def compute_v4r2_address(pubkey: bytes) -> str:
     """Compute V4R2 wallet address for a pubkey.
     Keystone stores keys indexed by V4R2 address — this is how it finds the signing key.
-    Uses standard V4R2 contract code (NOT Exton contract).
+    Uses standard V4R2 contract code (NOT EXME Cortex contract).
     """
     from . import address as addr_mod
 
@@ -91,7 +91,7 @@ def build_send_payload(
     mode: int = 3,
 ) -> Cell:
     """Build signing payload for a single TON transfer (Op 0).
-    Exact port from Kotlin ExtonMultiSigContract.buildUnsignedTransfer()."""
+    Exact port from Kotlin ExmeCortexContract.buildUnsignedTransfer()."""
     if valid_until is None:
         valid_until = int(time.time()) + DEFAULT_VALID_SECONDS
 
@@ -159,7 +159,7 @@ def build_remove_plugin_payload(
 
 
 def sign_payload(payload: Cell, app_privkey: bytes, tweak_hex: str = None) -> bytes:
-    """Sign payload cell hash with exton_app_key → 64-byte signature.
+    """Sign payload cell hash with exme_app_key -> 64-byte signature.
 
     If tweak_hex is provided, uses tweaked Ed25519 signing (vanity wallet).
     Otherwise uses standard Ed25519.
@@ -182,7 +182,7 @@ def assemble_external_message(
     wallet_hash: bytes,
     state_init: Cell = None,
 ) -> Cell:
-    """Assemble signed external message for Exton MultiSig.
+    """Assemble signed external message for EXME Cortex.
 
     If state_init is provided (first TX, wallet uninit), includes it.
     """
